@@ -1,0 +1,6 @@
+{
+  "name": "SecureCrypt Chat",
+  "description": "Ứng dụng trò chuyện bảo mật mã hóa đầu cuối (E2EE) với tin nhắn tự hủy và xác thực sinh trắc học vân tay/khuôn mặt.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

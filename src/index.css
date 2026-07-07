@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400&family=Playfair+Display:ital,wght@0,700;0,800;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Merriweather", "Georgia", serif;
+  --font-sans: "Inter", "Arial", sans-serif;
+  --color-dantri-green: #00483d;
+  --color-dantri-green-hover: #00362e;
+  --color-dantri-green-light: #f0f6f4;
+  --color-dantri-red: #c8102e;
+  --color-dantri-blue: #0d5cb6;
+  --color-dantri-dark: #222222;
+  --color-dantri-gray: #f4f5f6;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f7f9fa;
+  color: #222222;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
