@@ -95,7 +95,7 @@ export default function ChatInputArea({
   };
 
   return (
-    <div className="p-3 border-t border-slate-200 bg-white">
+    <div className="p-3 border-t border-slate-200 bg-transparent relative z-10">
       {/* Combined Info & Self-Destruct Row */}
       <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100 text-[10px] text-slate-500 font-sans relative">
         {/* Left side: Partner Info */}
@@ -345,12 +345,12 @@ export default function ChatInputArea({
                   ? "Nhắn tin..."
                   : "Nhắn tin... (Shift+Enter để xuống dòng)"
           }
-          className={`flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 h-[36px] ${
+          className={`flex-1 border rounded-xl px-3 py-1.5 h-[36px] ${
             chatFontSize === 'xs' ? 'text-xs' : chatFontSize === 'sm' ? 'text-sm' : chatFontSize === 'base' ? 'text-base' : 'text-lg'
-          } text-slate-800 focus:outline-none focus:ring-2 placeholder:text-slate-400 disabled:opacity-60 resize-none min-h-[36px] max-h-[120px] leading-relaxed scrollbar-none ${
+          } focus:outline-none focus:ring-2 placeholder:text-slate-400 disabled:opacity-60 resize-none min-h-[36px] max-h-[120px] leading-relaxed scrollbar-none ${
             isJiraTheme 
-              ? 'focus:border-jira-blue/40 focus:ring-jira-blue/5' 
-              : 'focus:border-dantri-green/40 focus:ring-dantri-green/5'
+              ? 'bg-[#deebff]/75 border-[#b3d4ff]/60 text-slate-900 focus:border-jira-blue/40 focus:ring-jira-blue/5' 
+              : 'bg-dantri-green-light/80 border-dantri-green/15 text-slate-850 focus:border-dantri-green/40 focus:ring-dantri-green/5'
           }`}
         />
 

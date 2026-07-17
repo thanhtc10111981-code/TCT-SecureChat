@@ -149,7 +149,7 @@ export default function ChatArea({
   });
   const [disguiseOpacity, setDisguiseOpacity] = React.useState<number>(() => {
     const val = localStorage.getItem('chat_disguise_opacity');
-    return val ? parseFloat(val) : 0.11;
+    return val ? parseFloat(val) : 0.6;
   });
 
   const renderDisguiseBackground = () => {

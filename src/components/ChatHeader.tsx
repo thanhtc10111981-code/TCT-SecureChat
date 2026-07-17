@@ -208,8 +208,8 @@ export default function ChatHeader({
                     <input
                       type="range"
                       min="0"
-                      max="40"
-                      step="2"
+                      max="100"
+                      step="5"
                       value={Math.round(disguiseOpacity * 100)}
                       onChange={(e) => {
                         const val = parseInt(e.target.value) / 100;
@@ -220,8 +220,8 @@ export default function ChatHeader({
                     />
                     <div className="flex justify-between text-[8px] text-slate-400 font-bold select-none px-0.5">
                       <span>ẨN (0%)</span>
-                      <span>MỜ (10%)</span>
-                      <span>RÕ (40%)</span>
+                      <span>VỪA (50%)</span>
+                      <span>RÕ (100%)</span>
                     </div>
                   </div>
                 </div>
