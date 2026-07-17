@@ -39,12 +39,14 @@ export default function SecurityHubSidebar({
 }: SecurityHubSidebarProps) {
   if (!showSecurityHub) return null;
 
+  const isJiraTheme = realUser?.theme === 'jira';
+
   return (
     <div className="hidden xl:flex w-80 shrink-0 flex-col bg-slate-50/50 border-l border-slate-200 h-full overflow-hidden text-left">
       {/* Header */}
       <div className="bg-slate-100/80 border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center space-x-2 text-[#005699]">
-          <Shield className="w-4 h-4 shrink-0 text-[#005699] animate-pulse" />
+        <div className={`flex items-center space-x-2 ${isJiraTheme ? 'text-jira-blue' : 'text-[#005699]'}`}>
+          <Shield className={`w-4 h-4 shrink-0 animate-pulse ${isJiraTheme ? 'text-jira-blue' : 'text-[#005699]'}`} />
           <h3 className="text-xs font-extrabold uppercase tracking-wider font-mono text-slate-800">
             GIÁM SÁT BẢO MẬT
           </h3>
@@ -63,7 +65,7 @@ export default function SecurityHubSidebar({
         {/* Khóa an toàn */}
         <div className="space-y-2 text-left">
           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono flex items-center space-x-1.5 border-b border-slate-200 pb-1.5">
-            <Cpu className="w-3.5 h-3.5 text-[#005699]" />
+            <Cpu className={`w-3.5 h-3.5 ${isJiraTheme ? 'text-jira-blue' : 'text-[#005699]'}`} />
             <span>Bản đồ khóa E2EE</span>
           </h4>
           <div className="space-y-3.5 text-xs font-mono">
@@ -95,8 +97,10 @@ export default function SecurityHubSidebar({
 
         {/* Cấu hình Nhận Thông Báo (PWA) */}
         <div className="space-y-2.5 text-left bg-white border border-slate-200/80 rounded-2xl p-3 shadow-sm">
-          <h4 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider font-mono flex items-center space-x-1.5 border-b border-slate-100 pb-1.5">
-            <Bell className="w-3.5 h-3.5 text-[#008075]" />
+          <h4 className={`text-[10px] font-bold uppercase tracking-wider font-mono flex items-center space-x-1.5 border-b border-slate-100 pb-1.5 ${
+            isJiraTheme ? 'text-jira-blue' : 'text-[#008075]'
+          }`}>
+            <Bell className="w-3.5 h-3.5" />
             <span>Cấu hình thông báo PWA</span>
           </h4>
 
@@ -105,7 +109,7 @@ export default function SecurityHubSidebar({
             <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono">
               <span>Thiết bị hiện tại:</span>
               {isPushSubscribed ? (
-                <span className="text-[#008075] font-bold flex items-center gap-0.5">● ĐÃ LIÊN KẾT</span>
+                <span className={`font-bold flex items-center gap-0.5 ${isJiraTheme ? 'text-jira-blue' : 'text-[#008075]'}`}>● ĐÃ LIÊN KẾT</span>
               ) : (
                 <span className="text-slate-400 font-bold">CHƯA LIÊN KẾT</span>
               )}
@@ -123,7 +127,11 @@ export default function SecurityHubSidebar({
               <button
                 type="button"
                 onClick={subscribeUserToPush}
-                className="w-full py-1.5 text-center text-[10px] font-bold font-mono text-white bg-[#008075] hover:bg-[#00665d] border border-[#008075] rounded-xl transition-all shadow-sm animate-pulse"
+                className={`w-full py-1.5 text-center text-[10px] font-bold font-mono text-white border rounded-xl transition-all shadow-sm animate-pulse cursor-pointer ${
+                  isJiraTheme 
+                    ? 'bg-jira-blue hover:bg-jira-blue-hover border-jira-blue' 
+                    : 'bg-[#008075] hover:bg-[#00665d] border-[#008075]'
+                }`}
               >
                 Nhận thông báo đẩy trên iPhone/PC
               </button>
@@ -140,7 +148,11 @@ export default function SecurityHubSidebar({
               <button
                 type="button"
                 onClick={handleTogglePrefWebPush}
-                className={`w-8 h-4 rounded-full transition-colors relative focus:outline-none ${prefWebPush ? 'bg-[#008075]' : 'bg-slate-200'}`}
+                className={`w-8 h-4 rounded-full transition-colors relative focus:outline-none ${
+                  prefWebPush 
+                    ? isJiraTheme ? 'bg-jira-blue' : 'bg-[#008075]' 
+                    : 'bg-slate-200'
+                }`}
               >
                 <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform" style={{ transform: prefWebPush ? 'translateX(18px)' : 'translateX(2px)' }} />
               </button>
@@ -152,7 +164,11 @@ export default function SecurityHubSidebar({
               <button
                 type="button"
                 onClick={handleTogglePrefTelegram}
-                className={`w-8 h-4 rounded-full transition-colors relative focus:outline-none ${prefTelegram ? 'bg-[#008075]' : 'bg-slate-200'}`}
+                className={`w-8 h-4 rounded-full transition-colors relative focus:outline-none ${
+                  prefTelegram 
+                    ? isJiraTheme ? 'bg-jira-blue' : 'bg-[#008075]' 
+                    : 'bg-slate-200'
+                }`}
               >
                 <span className="absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform" style={{ transform: prefTelegram ? 'translateX(18px)' : 'translateX(2px)' }} />
               </button>
@@ -168,7 +184,7 @@ export default function SecurityHubSidebar({
         {/* Nhật ký truyền tin bảo mật */}
         <div className="space-y-2 text-left flex flex-col h-[calc(100%-180px)] min-h-[300px]">
           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono flex items-center space-x-1.5 border-b border-slate-200 pb-1.5">
-            <Terminal className="w-3.5 h-3.5 text-[#005699]" />
+            <Terminal className={`w-3.5 h-3.5 ${isJiraTheme ? 'text-jira-blue' : 'text-[#005699]'}`} />
             <span>Nhật ký thời gian thực</span>
           </h4>
           <div className="flex-1 overflow-y-auto bg-white border border-slate-200 p-3 rounded-2xl space-y-2.5 font-mono text-[9px] text-left scrollbar-thin">

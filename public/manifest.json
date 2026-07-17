@@ -1,11 +1,11 @@
 {
-  "name": "Dân trí E2EE Secure Crypt Hub",
+  "name": "Dân trí",
   "short_name": "Dân trí",
-  "description": "Trung tâm trao đổi tin bài an toàn bảo mật mã hóa đầu cuối Báo Dân trí",
+  "description": "Báo điện tử Dân trí - Tin tức Việt Nam & Thế giới nóng nhất, cập nhật liên tục 24h.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#090d16",
-  "theme_color": "#008075",
+  "background_color": "#ffffff",
+  "theme_color": "#00483d",
   "orientation": "portrait-primary",
   "icons": [
     {

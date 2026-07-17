@@ -22,7 +22,7 @@ interface QueryResult {
 const PRESETS = [
   {
     label: 'Xem tất cả Users',
-    sql: 'SELECT id, username, name, role, biometric_type, pin_code, telegram_chat_id FROM users ORDER BY role ASC, id ASC;'
+    sql: 'SELECT id, username, name, role, pin_code, telegram_chat_id FROM users ORDER BY role ASC, id ASC;'
   },
   {
     label: 'Xem tất cả Messages',

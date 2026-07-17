@@ -232,7 +232,6 @@ export default function useCameraLogic({
       }
 
       const dbMsg = await res.json();
-      localStorage.setItem(`securecrypt_sent_cache_${dbMsg.id}`, contentPayload);
 
       playBeep('send');
       addLog(`[YÊU CẦU CAMERA] Gửi thành công yêu cầu tới ${activeRecipient.name} lên máy chủ.`, 'success');
@@ -314,7 +313,6 @@ export default function useCameraLogic({
       }
 
       const dbMsg = await res.json();
-      localStorage.setItem(`securecrypt_sent_cache_${dbMsg.id}`, payloadStr);
       localStorage.setItem(`camera_req_processed_${requestId}`, 'accepted');
 
       playBeep('send');

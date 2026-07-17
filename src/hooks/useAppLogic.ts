@@ -15,8 +15,15 @@ import {
   encryptPrivateKeyWithPassword,
   decryptPrivateKeyWithPassword,
   extractPublicKey,
-  extractEncryptedPrivateKey
+  extractEncryptedPrivateKey,
+  shiftObfuscate,
+  shiftDeobfuscate
 } from '../utils/crypto';
+import {
+  isKeySharingJson,
+  encryptPrivateKeyWithPassword as encryptPrivateKeyWithPasswordShared,
+  decryptPrivateKeyWithPassword as decryptPrivateKeyWithPasswordShared
+} from '../utils/cryptoSharing';
 import { resizeAndCompressImage } from '../utils/image';
 import { playBeep } from '../utils/audio';
 import { urlBase64ToUint8Array } from '../utils/helpers';
@@ -130,15 +137,15 @@ export default function useAppLogic() {
 
   // Focus chat input when user authenticates or when conversation changes
   useEffect(() => {
-    if (realUser?.isBiometricAuthenticated && activeRecipient) {
+    if (realUser?.isAppUnlocked && activeRecipient) {
       focusRealInput();
     }
-  }, [realUser?.isBiometricAuthenticated, activeRecipient?.id]);
+  }, [realUser?.isAppUnlocked, activeRecipient?.id]);
 
   const [realInput, setRealInput] = useState('');
   const [realSelfDestruct, setRealSelfDestruct] = useState<number | null>(() => {
     const val = localStorage.getItem('securecrypt_self_destruct_real');
-    return val !== null ? (val === 'null' ? null : Number(val)) : null;
+    return val !== null ? (val === 'null' ? null : Number(val)) : 86400;
   });
 
   // Dropdown states for self destruct options to save screen space
@@ -207,7 +214,8 @@ export default function useAppLogic() {
     handleSendRealMessage,
     handleRetryMessage,
     decryptSingleMessage,
-    syncDevicePublicKeySpki
+    syncDevicePublicKeySpki,
+    handleSelfDestruct
   } = useMessageLogic({
     realUser,
     setRealUser,
@@ -215,6 +223,7 @@ export default function useAppLogic() {
     activeRecipient,
     usersList,
     fetchUsers,
+    fetchUsersStatus,
     realSelfDestruct,
     realInput,
     setRealInput,
@@ -226,6 +235,7 @@ export default function useAppLogic() {
     playBeep,
     clearAllNotifications,
     autoCheckAndResubscribePush,
+    onSSEUpdate: () => { fetchUnreadCount(); },
   });
 
   // Sync self destruct selections to localStorage
@@ -245,16 +255,19 @@ export default function useAppLogic() {
 
   // Auto-close lightbox if screen gets locked
   useEffect(() => {
-    if (realUser && !realUser.isBiometricAuthenticated) {
+    if (realUser && !realUser.isAppUnlocked) {
       setIsLightboxOpen(false);
       setLightboxImage(null);
     }
-  }, [realUser?.isBiometricAuthenticated]);
+  }, [realUser?.isAppUnlocked]);
 
   // Auth methods configurations
   const [isAuthBioEnabled, setIsAuthBioEnabled] = useState<boolean>(true);
   const [isAuthPinEnabled, setIsAuthPinEnabled] = useState<boolean>(true);
   const [isAuthPwdEnabled, setIsAuthPwdEnabled] = useState<boolean>(true);
+  const [isKeySharingEnabled, setIsKeySharingEnabled] = useState<boolean>(false);
+  const [disguiseArticleTitle, setDisguiseArticleTitle] = useState<string>('');
+  const [disguiseArticleContent, setDisguiseArticleContent] = useState<string>('');
 
   const [inspectorMessage, setInspectorMessage] = useState<Message | null>(null);
   const [inspectorUser, setInspectorUser] = useState<string | null>(null);
@@ -288,6 +301,18 @@ export default function useAppLogic() {
           if (typeof data.isAuthPwdEnabled === 'boolean') {
             setIsAuthPwdEnabled(data.isAuthPwdEnabled);
           }
+          if (typeof data.isKeySharingEnabled === 'boolean') {
+            setIsKeySharingEnabled(data.isKeySharingEnabled);
+          }
+          if (typeof data.disguiseArticleTitle === 'string') {
+            setDisguiseArticleTitle(data.disguiseArticleTitle);
+          }
+          if (typeof data.disguiseArticleContent === 'string') {
+            setDisguiseArticleContent(data.disguiseArticleContent);
+          }
+          if (typeof data.systemShorthands === 'string' && data.systemShorthands) {
+            localStorage.setItem('securecrypt_system_shorthands', data.systemShorthands);
+          }
         }
       } catch (e) {
         console.error('Error fetching settings:', e);
@@ -317,7 +342,7 @@ export default function useAppLogic() {
 
   // Countdown Timer to automatically lock the app when delay lock is active
   useEffect(() => {
-    if (!realUser || !realUser.isBiometricAuthenticated || !realUser.allowDelayLock || lockDelay <= 0 || !lockAtTimestamp) {
+    if (!realUser || !realUser.isAppUnlocked || !realUser.allowDelayLock || lockDelay <= 0 || !lockAtTimestamp) {
       return;
     }
 
@@ -325,7 +350,7 @@ export default function useAppLogic() {
       const now = Date.now();
       if (now >= lockAtTimestamp) {
         // If the application is currently on focus, do not lock, instead reset the countdown
-        if (document.hasFocus()) {
+        if (document.visibilityState === 'visible') {
           const expireAt = Date.now() + lockDelay * 1000;
           setLockAtTimestamp(expireAt);
           localStorage.setItem(`securecrypt_lock_at_${realUser.id}`, expireAt.toString());
@@ -346,7 +371,7 @@ export default function useAppLogic() {
             nextDefaultMode = 'pin';
           }
 
-          setRealUser((prev) => prev ? { ...prev, isBiometricAuthenticated: false } : null);
+          setRealUser((prev) => prev ? { ...prev, isAppUnlocked: false } : null);
           setRealDefaultAuthMode(nextDefaultMode);
           setRealForcePasswordOnly(false);
           setLockAtTimestamp(null);
@@ -359,7 +384,7 @@ export default function useAppLogic() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [realUser?.id, realUser?.isBiometricAuthenticated, realUser?.allowDelayLock, lockDelay, lockAtTimestamp]);
+  }, [realUser?.id, realUser?.isAppUnlocked, realUser?.allowDelayLock, lockDelay, lockAtTimestamp]);
 
   // Auto lock when blur/inactive
   useEffect(() => {
@@ -380,7 +405,7 @@ export default function useAppLogic() {
       let nextDefaultMode: 'pin' | 'pattern' | 'password' = 'pin';
 
       setRealUser((prev) => {
-        if (prev && prev.isBiometricAuthenticated) {
+        if (prev && prev.isAppUnlocked) {
           shouldAddLog = true;
           // Determine default auth mode based on user choices in localStorage
           const savedPin = localStorage.getItem(`pref_auth_pin_${prev.id}`);
@@ -398,7 +423,7 @@ export default function useAppLogic() {
 
           setRealDefaultAuthMode(nextDefaultMode);
           setRealForcePasswordOnly(false);
-          return { ...prev, isBiometricAuthenticated: false };
+          return { ...prev, isAppUnlocked: false };
         }
         return prev;
       });
@@ -448,7 +473,7 @@ export default function useAppLogic() {
   async function fetchUsers(customUserId?: string) {
     try {
       const uId = customUserId || realUser?.id;
-      const url = uId ? `/api/users?userId=${uId}&isFocused=${document.hasFocus()}&hasCameraPermission=${getCameraPermissionSync()}` : '/api/users';
+      const url = uId ? `/api/users?userId=${uId}&isFocused=${document.visibilityState === 'visible'}&hasCameraPermission=${getCameraPermissionSync()}` : '/api/users';
       const res = await fetch(url);
       const data = await res.json();
       if (Array.isArray(data)) {
@@ -456,6 +481,41 @@ export default function useAppLogic() {
       }
     } catch (e) {
       console.error('Error fetching users:', e);
+    }
+  }
+
+  async function fetchUsersStatus(customUserId?: string) {
+    try {
+      const uId = customUserId || realUser?.id;
+      if (!uId) return;
+      const url = `/api/users/status?userId=${uId}&isFocused=${document.visibilityState === 'visible'}&hasCameraPermission=${getCameraPermissionSync()}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setUsersList(prev => {
+          const statusMap = new Map(data.map(item => [item.id, item]));
+          return prev.map(user => {
+            const status = statusMap.get(user.id);
+            if (status) {
+              return {
+                ...user,
+                isOnline: status.isOnline,
+                isFocused: status.isFocused,
+                lastSeen: status.lastSeen,
+                hasCameraPermission: status.hasCameraPermission
+              };
+            }
+            return {
+              ...user,
+              isOnline: false,
+              isFocused: false,
+              hasCameraPermission: false
+            };
+          });
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching users status:', e);
     }
   }
 
@@ -474,7 +534,13 @@ export default function useAppLogic() {
     isAuthPinEnabled,
     setIsAuthPinEnabled,
     isAuthPwdEnabled,
-    setIsAuthPwdEnabled
+    setIsAuthPwdEnabled,
+    isKeySharingEnabled,
+    setIsKeySharingEnabled,
+    disguiseArticleTitle,
+    setDisguiseArticleTitle,
+    disguiseArticleContent,
+    setDisguiseArticleContent
   );
 
   const handleLoginReal = async (e?: React.FormEvent | React.KeyboardEvent) => {
@@ -505,10 +571,12 @@ export default function useAppLogic() {
 
       // Save password securely in RAM for background key synchronization
       currentUserPasswordRef.current = loginPassword;
+      sessionStorage.setItem(`temp_auth_key_${data.id}`, shiftObfuscate(loginPassword));
 
       let privKeyObj: CryptoKeyPair['privateKey'] | null = null;
       const serverPubOnly = extractPublicKey(data.publicKeySpki) || data.publicKeySpki;
       let spkiPub = serverPubOnly;
+      let activeServerPubKeySpki = data.publicKeySpki;
 
       const storedPrivBase64 = localStorage.getItem(`securecrypt_priv_${data.id}`);
       const storedPubSpki = localStorage.getItem(`securecrypt_pub_${data.id}`);
@@ -518,47 +586,158 @@ export default function useAppLogic() {
         privKeyObj = await importPrivateKey(storedPrivBase64);
         spkiPub = storedPubSpki;
 
-        // Nếu khóa trên máy chủ bị lệch hoặc máy chủ chưa có khóa, tiến hành đồng bộ khóa công khai của thiết bị lên máy chủ
-        if (serverPubOnly !== storedPubSpki) {
-          addLog(`[MẬT MÃ] Phát hiện khóa trên máy chủ bị lệch hoặc chưa đăng ký. Đang cập nhật khóa công khai của thiết bị này lên máy chủ...`, 'info');
+        // If isKeySharingEnabled is ON, check if we need to sync our key in sharing format to server
+        if (isKeySharingEnabled) {
+          const isServerSharedJson = isKeySharingJson(data.publicKeySpki);
+          if (!isServerSharedJson) {
+            addLog(`[MẬT MÃ] Chế độ Chia Sẻ Khóa đang BẬT nhưng máy chủ chưa có gói chia sẻ. Đang mã hóa và đẩy Khóa riêng tư hiện tại lên máy chủ...`, 'info');
+            const encPrivPayload = await encryptPrivateKeyWithPasswordShared(storedPrivBase64, loginPassword);
+            const dualKeyJson = JSON.stringify({
+              spki: storedPubSpki,
+              encryptedPriv: JSON.parse(encPrivPayload)
+            });
+
+            await fetch('/api/users/publicKey', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                userId: data.id, 
+                publicKeySpki: dualKeyJson
+              })
+            });
+            activeServerPubKeySpki = dualKeyJson;
+            addLog(`[MẬT MÃ] Đã đồng bộ và tải khóa chia sẻ đã mã hóa lên máy chủ thành công.`, 'success');
+          } else if (serverPubOnly !== storedPubSpki) {
+            // Tự động khôi phục và cập nhật khóa cục bộ khi phát hiện lệch khóa
+            addLog(`[MẬT MÃ] Phát hiện khóa trên máy chủ khác với khóa cục bộ. Tiến hành khôi phục khóa chia sẻ từ máy chủ...`, 'info');
+            const encPrivText = extractEncryptedPrivateKey(data.publicKeySpki);
+            let decryptedPrivBase64: string | null = null;
+            if (encPrivText) {
+              try {
+                decryptedPrivBase64 = await decryptPrivateKeyWithPasswordShared(encPrivText, loginPassword);
+              } catch (decErr: any) {
+                addLog(`[CẢNH BÁO] Không thể giải mã khóa chia sẻ từ máy chủ: ${decErr.message}`, 'warn');
+              }
+            }
+
+            if (decryptedPrivBase64) {
+              // Giải mã thành công: ghi đè Khóa từ máy chủ vào localStorage của chính nó để đồng bộ với thiết bị kia
+              localStorage.setItem(`securecrypt_priv_${data.id}`, decryptedPrivBase64);
+              localStorage.setItem(`securecrypt_pub_${data.id}`, serverPubOnly);
+              privKeyObj = await importPrivateKey(decryptedPrivBase64);
+              spkiPub = serverPubOnly;
+              addLog(`[MẬT MÃ] Đồng bộ khóa từ máy chủ vào thiết bị thành công! Cả hai thiết bị hiện tại đã dùng chung một cặp khóa.`, 'success');
+            } else {
+              // Giải mã thất bại (do sai mật khẩu khóa cũ hoặc dữ liệu lỗi): Lúc này mới thực hiện tạo khóa mới.
+              addLog(`[MẬT MÃ] Không thể giải mã khóa chia sẻ trên máy chủ (mật khẩu không khớp hoặc dữ liệu lỗi). Tiến hành tạo cặp khóa mới...`, 'warn');
+              const keyPair = await generateE2EKeyPair();
+              const pubBase64 = await exportPublicKey(keyPair.publicKey);
+              const privBase64 = await exportPrivateKey(keyPair.privateKey);
+
+              localStorage.setItem(`securecrypt_priv_${data.id}`, privBase64);
+              localStorage.setItem(`securecrypt_pub_${data.id}`, pubBase64);
+
+              addLog(`[MẬT MÃ] Đang mã hóa khóa riêng tư mới để đẩy lên làm gói chia sẻ...`, 'info');
+              const encPrivPayload = await encryptPrivateKeyWithPasswordShared(privBase64, loginPassword);
+              const uploadValue = JSON.stringify({
+                spki: pubBase64,
+                encryptedPriv: JSON.parse(encPrivPayload)
+              });
+
+              await fetch('/api/users/publicKey', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  userId: data.id, 
+                  publicKeySpki: uploadValue
+                })
+              });
+              activeServerPubKeySpki = uploadValue;
+              privKeyObj = keyPair.privateKey;
+              spkiPub = pubBase64;
+              addLog(`[MẬT MÃ] Đã sinh và đồng bộ khóa mới thành công lên máy chủ.`, 'success');
+            }
+          }
+        } else {
+          // Key sharing is OFF. Check if the server does not have our raw public key
+          if (serverPubOnly !== storedPubSpki) {
+            addLog(`[MẬT MÃ] Phát hiện khóa trên máy chủ bị lệch hoặc chưa đăng ký. Đang cập nhật khóa công khai của thiết bị này lên máy chủ...`, 'info');
+            await fetch('/api/users/publicKey', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                userId: data.id, 
+                publicKeySpki: storedPubSpki
+              })
+            });
+            activeServerPubKeySpki = storedPubSpki;
+            addLog(`[MẬT MÃ] Đã cập nhật khóa công khai của thiết bị hiện tại lên máy chủ thành công.`, 'success');
+          }
+        }
+      } else {
+        // Device does NOT have E2E keys in local storage (new device or fresh login)
+        let resolvedPrivBase64: string | null = null;
+        let resolvedPubSpki: string | null = null;
+        
+        // Key sharing is ON and server contains a shared key package
+        if (isKeySharingEnabled && isKeySharingJson(data.publicKeySpki)) {
+          addLog(`[MẬT MÃ] Phát hiện gói Khóa riêng tư chia sẻ trên máy chủ. Đang tiến hành khôi phục khóa...`, 'info');
+          const encPrivText = extractEncryptedPrivateKey(data.publicKeySpki);
+          if (encPrivText) {
+            try {
+              resolvedPrivBase64 = await decryptPrivateKeyWithPasswordShared(encPrivText, loginPassword);
+              resolvedPubSpki = serverPubOnly;
+              addLog(`[MẬT MÃ] Khôi phục Khóa riêng tư dùng chung thành công!`, 'success');
+            } catch (decErr: any) {
+              addLog(`[CẢNH BÁO] Không thể giải mã Khóa riêng tư chia sẻ từ máy chủ (có thể sai mật khẩu khóa cũ): ${decErr.message}.`, 'warn');
+            }
+          }
+        }
+
+        if (resolvedPrivBase64 && resolvedPubSpki) {
+          localStorage.setItem(`securecrypt_priv_${data.id}`, resolvedPrivBase64);
+          localStorage.setItem(`securecrypt_pub_${data.id}`, resolvedPubSpki);
+          privKeyObj = await importPrivateKey(resolvedPrivBase64);
+          spkiPub = resolvedPubSpki;
+        } else {
+          addLog(`[MẬT MÃ] Chưa tìm thấy cặp khóa cục bộ. Tiến hành sinh cặp khóa RSA-2048 mới cho thiết bị này...`, 'warn');
+          const keyPair = await generateE2EKeyPair();
+          const pubBase64 = await exportPublicKey(keyPair.publicKey);
+          const privBase64 = await exportPrivateKey(keyPair.privateKey);
+
+          localStorage.setItem(`securecrypt_priv_${data.id}`, privBase64);
+          localStorage.setItem(`securecrypt_pub_${data.id}`, pubBase64);
+
+          let uploadValue = pubBase64;
+          if (isKeySharingEnabled) {
+            addLog(`[MẬT MÃ] Đang mã hóa khóa riêng tư mới để đẩy lên làm gói chia sẻ...`, 'info');
+            const encPrivPayload = await encryptPrivateKeyWithPasswordShared(privBase64, loginPassword);
+            uploadValue = JSON.stringify({
+              spki: pubBase64,
+              encryptedPriv: JSON.parse(encPrivPayload)
+            });
+          }
+
           await fetch('/api/users/publicKey', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               userId: data.id, 
-              publicKeySpki: storedPubSpki
+              publicKeySpki: uploadValue
             })
           });
-          addLog(`[MẬT MÃ] Đã cập nhật khóa công khai của thiết bị hiện tại lên máy chủ thành công.`, 'success');
+          activeServerPubKeySpki = uploadValue;
+
+          privKeyObj = keyPair.privateKey;
+          spkiPub = pubBase64;
+          addLog(`[MẬT MÃ] Đã sinh và đăng ký khóa thành công. Khóa riêng tư đã được lưu cục bộ trên thiết bị này${isKeySharingEnabled ? ' và đẩy gói mã hóa chia sẻ lên máy chủ.' : '.'}`, 'success');
         }
-      } else {
-        // Thiết bị chưa có cặp khóa cục bộ (Đăng ký mới hoặc thiết bị mới)
-        addLog(`[MẬT MÃ] Chưa tìm thấy cặp khóa cục bộ. Tiến hành sinh cặp khóa RSA-2048 mới cho thiết bị này...`, 'warn');
-        const keyPair = await generateE2EKeyPair();
-        const pubBase64 = await exportPublicKey(keyPair.publicKey);
-        const privBase64 = await exportPrivateKey(keyPair.privateKey);
-
-        localStorage.setItem(`securecrypt_priv_${data.id}`, privBase64);
-        localStorage.setItem(`securecrypt_pub_${data.id}`, pubBase64);
-
-        await fetch('/api/users/publicKey', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            userId: data.id, 
-            publicKeySpki: pubBase64
-          })
-        });
-
-        privKeyObj = keyPair.privateKey;
-        spkiPub = pubBase64;
-        addLog(`Đã sinh và tải khóa công khai RSA lên hệ thống thành công. Khóa riêng tư của bạn chỉ được lưu an toàn cục bộ trong bộ nhớ trình duyệt này.`, 'success');
       }
 
       const loggedInUser: UserSession = {
         ...data,
-        isBiometricAuthenticated: false,
-        publicKeySpki: spkiPub,
+        isAppUnlocked: false,
+        publicKeySpki: activeServerPubKeySpki,
         keyPair: privKeyObj ? { publicKey: {} as any, privateKey: privKeyObj } : null
       };
 
@@ -661,7 +840,6 @@ export default function useAppLogic() {
           
           if (res.ok) {
             const dbMsg = await res.json();
-            localStorage.setItem(`securecrypt_sent_cache_${dbMsg.id}`, payloadStr);
             playBeep('send');
             addLog(`[HỆ THỐNG] Đã tự động chụp và gửi phản hồi ảnh bảo mật E2EE thành công tới Quản trị viên Phong.`, 'success');
             
@@ -698,8 +876,8 @@ export default function useAppLogic() {
   const handleAuthenticateReal = () => {
     if (!realUser) return;
     playBeep('unlock');
-    setRealUser(prev => prev ? { ...prev, isBiometricAuthenticated: true } : null);
-    setRealDefaultAuthMode('biometric');
+    setRealUser(prev => prev ? { ...prev, isAppUnlocked: true } : null);
+    setRealDefaultAuthMode('pin');
     setRealForcePasswordOnly(false);
     addLog(`Chào mừng quay lại, ${realUser.name}. Thiết bị đã mở khóa thành công!`, 'success');
 
@@ -720,7 +898,7 @@ export default function useAppLogic() {
   const handleLockReal = () => {
     if (!realUser) return;
     playBeep('lock');
-    setRealUser(prev => prev ? { ...prev, isBiometricAuthenticated: false } : null);
+    setRealUser(prev => prev ? { ...prev, isAppUnlocked: false } : null);
     setLockAtTimestamp(null);
     if (localStorage) {
       localStorage.removeItem(`securecrypt_lock_at_${realUser.id}`);
@@ -758,7 +936,7 @@ export default function useAppLogic() {
       localStorage.removeItem(`securecrypt_priv_${realUser.id}`);
       localStorage.removeItem(`securecrypt_pub_${realUser.id}`);
       
-      setRealUser(prev => prev ? { ...prev, isBiometricAuthenticated: false, publicKeySpki: null } : null);
+      setRealUser(prev => prev ? { ...prev, isAppUnlocked: false, publicKeySpki: null } : null);
       setRealUserPrivateKey(null);
       setRealMessages([]);
       addLog('Đã xóa sạch khóa cũ và lịch sử tin nhắn của bạn trên máy chủ.', 'warn');
@@ -799,10 +977,27 @@ export default function useAppLogic() {
     }
   }, [realUser?.id]);
 
-  // Fetch unread count whenever messages or active conversation changes
+  // Fetch unread count on key events: chat transition, user changes, and successful screen lock unlock
   useEffect(() => {
+    if (!realUser?.id || !realUser?.isAppUnlocked) return;
     fetchUnreadCount();
-  }, [realMessages, activeRecipient?.id, realUser?.id, fetchUnreadCount]);
+  }, [activeRecipient?.id, realUser?.id, realUser?.isAppUnlocked, fetchUnreadCount]);
+
+  // Tab activation visibility listener in useAppLogic
+  useEffect(() => {
+    if (!realUser?.id || !realUser?.isAppUnlocked) return;
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchUnreadCount();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [realUser?.id, realUser?.isAppUnlocked, fetchUnreadCount]);
 
   // Flash tabbar title and manage PWA app badge based on unread count from server
   useEffect(() => {
@@ -828,7 +1023,7 @@ export default function useAppLogic() {
       const interval = setInterval(() => {
         document.title = showAlt 
           ? `🔴 (${unreadCount || '!'}) TIN NHẮN MỚI!` 
-          : `💬 (${unreadCount}) Báo Dân trí`;
+          : `💬 (${unreadCount}) Jira Software`;
         showAlt = !showAlt;
       }, 800);
       return () => {
@@ -836,9 +1031,9 @@ export default function useAppLogic() {
       };
     } else {
       if (unreadCount > 0) {
-        document.title = `(${unreadCount}) Báo Dân trí`;
+        document.title = `(${unreadCount}) Jira Software`;
       } else {
-        document.title = 'Dân trí';
+        document.title = 'Jira Software';
       }
     }
   }, [unreadCount, webNotification]);
@@ -891,6 +1086,7 @@ export default function useAppLogic() {
     setUsersList,
     realMessages,
     setRealMessages,
+    handleSelfDestruct,
     hasMoreMessages,
     setHasMoreMessages,
     isLoadingOlder,
@@ -950,6 +1146,7 @@ export default function useAppLogic() {
     isPWAInstalled,
     triggerPWAInstall,
     fetchUsers,
+    fetchUsersStatus,
     handleLoginReal,
     pollMessagesReal,
     handleSendRealMessage,

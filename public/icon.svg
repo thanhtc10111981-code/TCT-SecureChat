@@ -1,4 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="110" fill="#008075" />
-  <text x="50%" y="55%" font-family="'Inter', 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="280" fill="#FFFFFF" dominant-baseline="middle" text-anchor="middle">D</text>
+  <defs>
+    <!-- Blue gradient for the classic globe -->
+    <linearGradient id="dantri-blue-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0072bc" />
+      <stop offset="100%" stop-color="#003e80" />
+    </linearGradient>
+    <!-- Green gradient for the iconic leaf/intellect symbol -->
+    <linearGradient id="dantri-green-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2ecc71" />
+      <stop offset="100%" stop-color="#00a651" />
+    </linearGradient>
+    <!-- Soft shadow for the logo element -->
+    <filter id="logo-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <drop-shadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.1" />
+    </filter>
+  </defs>
+
+  <!-- PWA App Icon Rounded Background Container -->
+  <rect width="512" height="512" rx="120" fill="#FFFFFF" />
+
+  <!-- Classic Dân Trí Symbol Group -->
+  <g filter="url(#logo-shadow)" transform="translate(0, -10)">
+    <!-- 1. The Globe Circle (Deep Blue) -->
+    <circle cx="256" cy="210" r="115" fill="url(#dantri-blue-grad)" />
+
+    <!-- 2. The Stylized White Crescent / Latitude Swoop (representing 'd' and communication) -->
+    <path d="M 185 145 
+             C 115 195, 125 265, 185 275 
+             C 155 255, 150 195, 185 145 Z" 
+          fill="#FFFFFF" 
+          opacity="0.95" />
+
+    <!-- 3. The Stylized Globe Grid Lines (subtle white lines inside blue circle) -->
+    <path d="M 170 210 Q 256 165 342 210" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.3" />
+    <path d="M 175 235 Q 256 195 337 235" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.3" />
+    <path d="M 256 95 Q 220 210 256 325" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" opacity="0.3" />
+
+    <!-- 4. The Iconic Green Leaf (representing growth and intelligence) -->
+    <path d="M 235 140 
+             C 290 120, 315 175, 305 235 
+             C 255 235, 225 185, 235 140 Z" 
+          fill="url(#dantri-green-grad)" />
+  </g>
+
+  <!-- Brand Typography -->
+  <!-- "Dân trí" styled in the signature brand green with serif elegance -->
+  <text x="256" y="415" 
+        font-family="'Lora', 'Playfair Display', 'Georgia', 'Times New Roman', serif" 
+        font-weight="900" 
+        font-size="68" 
+        fill="#007d32" 
+        text-anchor="middle" 
+        letter-spacing="-1">Dân trí</text>
+
+  <!-- Slogan / Tagline -->
+  <text x="256" y="455" 
+        font-family="'Inter', system-ui, -apple-system, sans-serif" 
+        font-weight="600" 
+        font-size="14" 
+        fill="#888888" 
+        text-anchor="middle" 
+        letter-spacing="1.5" 
+        opacity="0.8"
+        text-transform="uppercase">Nhân văn - Tin cậy - Kịp thời</text>
 </svg>

@@ -19,6 +19,8 @@ export interface Message {
   isRead: boolean;
   isDestroyed: boolean;
   status?: 'sending' | 'sent' | 'failed';
+  gdriveFileId?: string | null;
+  reactions?: Record<string, string>; // user_id -> emoji
 }
 
 export interface UserSession {
@@ -29,9 +31,7 @@ export interface UserSession {
   role: string;
   publicKeySpki: string | null;
   keyPair: CryptoKeyPair | null;
-  isBiometricRegistered: boolean;
-  isBiometricAuthenticated: boolean;
-  biometricType: 'fingerprint' | 'face' | 'none';
+  isAppUnlocked: boolean;
   pinCode?: string;
   hasPinCode?: boolean;
   password?: string;
@@ -47,6 +47,7 @@ export interface UserSession {
   isFocused?: boolean;
   lastSeen?: number | null;
   hasCameraPermission?: boolean;
+  theme?: string;
 }
 
 export interface EditorialArticle {

@@ -16,7 +16,13 @@ export default function useAdminLogic(
   isAuthPinEnabled: boolean,
   setIsAuthPinEnabled: React.Dispatch<React.SetStateAction<boolean>>,
   isAuthPwdEnabled: boolean,
-  setIsAuthPwdEnabled: React.Dispatch<React.SetStateAction<boolean>>
+  setIsAuthPwdEnabled: React.Dispatch<React.SetStateAction<boolean>>,
+  isKeySharingEnabled: boolean,
+  setIsKeySharingEnabled: React.Dispatch<React.SetStateAction<boolean>>,
+  disguiseArticleTitle: string,
+  setDisguiseArticleTitle: React.Dispatch<React.SetStateAction<string>>,
+  disguiseArticleContent: string,
+  setDisguiseArticleContent: React.Dispatch<React.SetStateAction<string>>
 ) {
   // Admin Account Creation Panel state
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
@@ -24,11 +30,45 @@ export default function useAdminLogic(
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<'admin' | 'user'>('user');
-  const [newBiometric, setNewBiometric] = useState<'fingerprint' | 'face'>('fingerprint');
   const [newPinCode, setNewPinCode] = useState('');
   const [newAllowDelayLock, setNewAllowDelayLock] = useState(true);
+  const [newTheme, setNewTheme] = useState<string>('dantri');
   const [adminSuccessMsg, setAdminSuccessMsg] = useState<string | null>(null);
   const [adminErrorMsg, setAdminErrorMsg] = useState<string | null>(null);
+
+  // Disguise Article state
+  const [isSavingDisguise, setIsSavingDisguise] = useState(false);
+  const [saveDisguiseSuccessMsg, setSaveDisguiseSuccessMsg] = useState<string | null>(null);
+  const [saveDisguiseErrorMsg, setSaveDisguiseErrorMsg] = useState<string | null>(null);
+
+  const handleSaveDisguiseArticle = async () => {
+    setIsSavingDisguise(true);
+    setSaveDisguiseSuccessMsg(null);
+    setSaveDisguiseErrorMsg(null);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          disguiseArticleTitle,
+          disguiseArticleContent
+        })
+      });
+      if (res.ok) {
+        setSaveDisguiseSuccessMsg('Cập nhật nội dung bài báo thành công!');
+        addLog('[CẤU HÌNH] Đã cập nhật tiêu đề và nội dung bài báo ngụy trang lên máy chủ.', 'success');
+        setTimeout(() => setSaveDisguiseSuccessMsg(null), 3000);
+      } else {
+        const errData = await res.json();
+        setSaveDisguiseErrorMsg(errData.error || 'Có lỗi xảy ra khi lưu nội dung bài báo.');
+      }
+    } catch (e: any) {
+      console.error(e);
+      setSaveDisguiseErrorMsg(e.message || 'Lỗi kết nối mạng.');
+    } finally {
+      setIsSavingDisguise(false);
+    }
+  };
 
   // Telegram & Web notifications configuration
   const [newTelegramChatId, setNewTelegramChatId] = useState('');
@@ -45,13 +85,13 @@ export default function useAdminLogic(
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState<'admin' | 'user'>('user');
-  const [editBiometric, setEditBiometric] = useState<'fingerprint' | 'face'>('fingerprint');
   const [editPinCode, setEditPinCode] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [editTelegramChatId, setEditTelegramChatId] = useState('');
   const [editPatternLock, setEditPatternLock] = useState('');
   const [editAllowDelayLock, setEditAllowDelayLock] = useState(false);
+  const [editTheme, setEditTheme] = useState<string>('dantri');
 
   const fetchAllUsersForAdmin = async () => {
     try {
@@ -85,10 +125,10 @@ export default function useAdminLogic(
           password: newPassword,
           name: newName,
           role: newRole,
-          biometricType: newBiometric,
           pinCode: newPinCode || '1234',
           telegramChatId: newTelegramChatId,
-          allowDelayLock: newAllowDelayLock
+          allowDelayLock: newAllowDelayLock,
+          theme: newTheme
         })
       });
 
@@ -109,6 +149,7 @@ export default function useAdminLogic(
       setNewPinCode('');
       setNewTelegramChatId('');
       setNewAllowDelayLock(true);
+      setNewTheme('dantri');
       
       fetchUsers();
       fetchAllUsersForAdmin();
@@ -139,13 +180,13 @@ export default function useAdminLogic(
           id: editingUser.id,
           name: editName,
           role: editRole,
-          biometricType: editBiometric,
           pinCode: editPinCode || undefined,
           password: editPassword || undefined,
           avatar: editAvatar || undefined,
           telegramChatId: editTelegramChatId,
           patternLock: editPatternLock || undefined,
-          allowDelayLock: editAllowDelayLock
+          allowDelayLock: editAllowDelayLock,
+          theme: editTheme
         })
       });
 
@@ -167,6 +208,7 @@ export default function useAdminLogic(
       setEditTelegramChatId('');
       setEditPatternLock('');
       setEditAllowDelayLock(false);
+      setEditTheme('dantri');
       fetchAllUsersForAdmin();
       fetchUsers();
     } catch (err) {
@@ -384,6 +426,24 @@ export default function useAdminLogic(
     }
   };
 
+  const handleToggleKeySharing = async () => {
+    const nextVal = !isKeySharingEnabled;
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isKeySharingEnabled: nextVal })
+      });
+      if (res.ok) {
+        setIsKeySharingEnabled(nextVal);
+        addLog(`[CẤU HÌNH] Đã ${nextVal ? 'BẬT' : 'TẮT'} chế độ chia sẻ khóa bảo mật giữa các thiết bị.`, 'success');
+      }
+    } catch (e) {
+      console.error('Error saving settings:', e);
+      addLog('[LỖI] Không thể lưu cấu hình chia sẻ khóa.', 'warn');
+    }
+  };
+
   return {
     isAdminPanelOpen,
     setIsAdminPanelOpen,
@@ -395,12 +455,12 @@ export default function useAdminLogic(
     setNewName,
     newRole,
     setNewRole,
-    newBiometric,
-    setNewBiometric,
     newPinCode,
     setNewPinCode,
     newAllowDelayLock,
     setNewAllowDelayLock,
+    newTheme,
+    setNewTheme,
     adminSuccessMsg,
     setAdminSuccessMsg,
     adminErrorMsg,
@@ -425,8 +485,6 @@ export default function useAdminLogic(
     setEditName,
     editRole,
     setEditRole,
-    editBiometric,
-    setEditBiometric,
     editPinCode,
     setEditPinCode,
     editPassword,
@@ -439,12 +497,16 @@ export default function useAdminLogic(
     setEditPatternLock,
     editAllowDelayLock,
     setEditAllowDelayLock,
+    editTheme,
+    setEditTheme,
     isAuthBioEnabled,
     setIsAuthBioEnabled,
     isAuthPinEnabled,
     setIsAuthPinEnabled,
     isAuthPwdEnabled,
     setIsAuthPwdEnabled,
+    isKeySharingEnabled,
+    handleToggleKeySharing,
     handleAdminCreateUser,
     fetchAllUsersForAdmin,
     handleAdminUpdateUser,
@@ -459,6 +521,14 @@ export default function useAdminLogic(
     handleToggleAuthPin,
     handleToggleAuthPwd,
     handleAdminUnlinkPair,
-    handleAdminDeleteUser
+    handleAdminDeleteUser,
+    disguiseArticleTitle,
+    setDisguiseArticleTitle,
+    disguiseArticleContent,
+    setDisguiseArticleContent,
+    isSavingDisguise,
+    saveDisguiseSuccessMsg,
+    saveDisguiseErrorMsg,
+    handleSaveDisguiseArticle
   };
 }

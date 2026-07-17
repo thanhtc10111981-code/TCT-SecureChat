@@ -6,6 +6,7 @@ import {
   extractPublicKey
 } from '../utils/crypto';
 import { getCameraPermissionSync } from '../utils/cameraPermission';
+import { autoCorrectText } from '../utils/localNlpPredictor';
 
 interface UseMessageLogicProps {
   realUser: UserSession | null;
@@ -14,6 +15,7 @@ interface UseMessageLogicProps {
   activeRecipient: UserSession | null;
   usersList: UserSession[];
   fetchUsers: (customUserId?: string) => Promise<void>;
+  fetchUsersStatus: (customUserId?: string) => Promise<void>;
   realSelfDestruct: number | null;
   realInput: string;
   setRealInput: React.Dispatch<React.SetStateAction<string>>;
@@ -25,6 +27,7 @@ interface UseMessageLogicProps {
   playBeep: (type?: string) => void;
   clearAllNotifications: () => void;
   autoCheckAndResubscribePush: () => void;
+  onSSEUpdate?: () => void;
 }
 
 export default function useMessageLogic({
@@ -34,6 +37,7 @@ export default function useMessageLogic({
   activeRecipient,
   usersList,
   fetchUsers,
+  fetchUsersStatus,
   realSelfDestruct,
   realInput,
   setRealInput,
@@ -45,6 +49,7 @@ export default function useMessageLogic({
   playBeep,
   clearAllNotifications,
   autoCheckAndResubscribePush,
+  onSSEUpdate,
 }: UseMessageLogicProps) {
   const [realMessages, setRealMessages] = useState<Message[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -56,6 +61,7 @@ export default function useMessageLogic({
   const isFirstPollRef = useRef<boolean>(true);
   const isSendingRef = useRef<boolean>(false);
   const isPollingRef = useRef<boolean>(false);
+  const debounceSyncTimeoutRef = useRef<any>(null);
   const readQueueRef = useRef<string[]>([]);
   const readTimeoutRef = useRef<any>(null);
   const hasSyncedKeysRef = useRef<boolean>(false);
@@ -104,7 +110,7 @@ export default function useMessageLogic({
     if (!realUser || !realUserPrivateKey) return msg;
     
     if (msg.isDestroyed) {
-      return { ...msg, decryptedText: null };
+      return { ...msg, decryptedText: null, selfDestructTimeRemaining: 0 };
     }
 
     if (msg.recipientId === realUser.id) {
@@ -119,7 +125,7 @@ export default function useMessageLogic({
         let isRead = msg.isRead;
         let readAt = msg.readAt;
 
-        if (realUser?.isBiometricAuthenticated && activeRecipient && activeRecipient.id === msg.senderId && !msg.isRead) {
+        if (realUser?.isAppUnlocked && activeRecipient && activeRecipient.id === msg.senderId && !msg.isRead) {
           await fetch('/api/messages/read', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -135,33 +141,49 @@ export default function useMessageLogic({
           selfDestructTimeRemaining = Math.max(0, msg.selfDestructDuration - elapsed);
         }
 
+        let isDestroyed = msg.isDestroyed || false;
+        let decryptedText = rawDecrypted;
+        if (msg.selfDestructDuration !== null && selfDestructTimeRemaining === 0) {
+          isDestroyed = true;
+          decryptedText = null;
+        }
+
         return {
           ...msg,
-          decryptedText: rawDecrypted,
+          decryptedText,
           isRead,
           readAt,
+          isDestroyed,
           selfDestructTimeRemaining
         };
       } catch (e) {
         return { ...msg, decryptedText: '[Lỗi giải mã: Khóa không đúng]' };
       }
     } else if (msg.senderId === realUser.id) {
-      const cachedText = localStorage.getItem(`securecrypt_sent_cache_${msg.id}`);
-      
       let selfDestructTimeRemaining = msg.selfDestructDuration;
       if (msg.isRead && msg.readAt !== null && msg.selfDestructDuration !== null) {
         const elapsed = Math.floor((Date.now() - msg.readAt) / 1000);
         selfDestructTimeRemaining = Math.max(0, msg.selfDestructDuration - elapsed);
       }
 
-      let decryptedText = cachedText || 'Đã gửi (Mã hóa E2EE)';
-      if (!cachedText) {
+      let isDestroyed = msg.isDestroyed || false;
+      let decryptedText = 'Đã gửi (Mã hóa E2EE)';
+      if (msg.selfDestructDuration !== null && selfDestructTimeRemaining === 0) {
+        isDestroyed = true;
+        decryptedText = null;
+      }
+
+      if (!isDestroyed) {
         const payload = msg.encryptedPayload;
-        if (payload && typeof payload === 'object' && payload.isMultiDevice && payload.senderPayload) {
-          try {
-            decryptedText = await decryptMessage(payload.senderPayload, realUserPrivateKey);
-          } catch (decErr) {
-            console.warn('Failed to decrypt senderPayload:', decErr);
+        if (payload && typeof payload === 'object') {
+          const targetPayload = (payload.isMultiDevice && payload.senderPayload) ? payload.senderPayload : payload;
+          if (targetPayload) {
+            try {
+              decryptedText = await decryptMessage(targetPayload, realUserPrivateKey);
+            } catch (decErr) {
+              console.warn('Failed to decrypt senderPayload:', decErr);
+              decryptedText = '[Lỗi giải mã: Khóa không đúng]';
+            }
           }
         }
       }
@@ -169,6 +191,7 @@ export default function useMessageLogic({
       return {
         ...msg,
         decryptedText,
+        isDestroyed,
         selfDestructTimeRemaining
       };
     }
@@ -279,9 +302,9 @@ export default function useMessageLogic({
     }
   }, [activeRecipient?.id, realUser?.id, decryptSingleMessage]);
 
-  // Automatically mark unread messages as read when activeRecipient changes, biometric is authenticated, or new unread messages arrive
+  // Automatically mark unread messages as read when activeRecipient changes, screen lock is unlocked, or new unread messages arrive
   useEffect(() => {
-    if (!realUser || !realUser.isBiometricAuthenticated || !activeRecipient) return;
+    if (!realUser || !realUser.isAppUnlocked || !activeRecipient) return;
 
     // Find all unread messages from activeRecipient to realUser
     const unreadMessages = realMessages.filter(
@@ -336,166 +359,162 @@ export default function useMessageLogic({
     };
 
     markAsRead();
-  }, [activeRecipient?.id, realUser?.isBiometricAuthenticated, realMessages.length]);
+  }, [activeRecipient?.id, realUser?.isAppUnlocked, realMessages.length]);
 
-  const pollMessagesReal = useCallback(async () => {
-    if (!realUser || !realUserPrivateKey) return;
-    if (isPollingRef.current) return { hasNewMessages: false, hasUpdates: false };
-    isPollingRef.current = true;
-    try {
-      const isFirstPoll = isFirstPollRef.current;
-      
-      let newRawMessages: any[] = [];
-      let statusUpdates: any[] = [];
-      let deletedIdsOnServer: string[] = [];
+  const pollMessagesReal = useCallback(() => {
+    if (!realUser || !realUser.isAppUnlocked || !realUserPrivateKey) return;
 
-      if (isFirstPoll) {
-        // Bootstrap: fetch latest 50 messages overall
-        const res = await fetch(`/api/messages?userId=${realUser.id}&limit=50`);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          newRawMessages = data;
-        }
-        isFirstPollRef.current = false;
-      } else {
-        // Find maximum timestamp of already loaded messages
-        const realMsgs = realMessagesRef.current.filter(m => !m.id.startsWith('temp-') && !m.id.startsWith('opt-'));
-        const lastSyncTimestamp = realMsgs.length > 0 
-          ? Math.max(...realMsgs.map(m => m.timestamp)) 
-          : 0;
+    if (debounceSyncTimeoutRef.current) {
+      clearTimeout(debounceSyncTimeoutRef.current);
+    }
 
-        // Pending messages: either unread, or self-destructing and not destroyed yet
-        const pendingIds = realMessagesRef.current
-          .filter(m => !m.isRead || (m.selfDestructDuration !== null && !m.isDestroyed))
-          .map(m => m.id)
-          .filter(id => !id.startsWith('temp-') && !id.startsWith('opt-'));
-
-        const loadedIds = realMessagesRef.current
-          .slice(-20)
-          .map(m => m.id)
-          .filter(id => !id.startsWith('temp-') && !id.startsWith('opt-'));
-
-        const res = await fetch(`/api/messages/sync?userId=${realUser.id}&sinceTimestamp=${lastSyncTimestamp}&pendingIds=${pendingIds.join(',')}&loadedIds=${loadedIds.join(',')}&isFocused=${document.hasFocus()}&hasCameraPermission=${getCameraPermissionSync()}`);
-        const syncResult = await res.json();
+    debounceSyncTimeoutRef.current = setTimeout(async () => {
+      if (isPollingRef.current) return;
+      isPollingRef.current = true;
+      try {
+        const isFirstPoll = isFirstPollRef.current;
         
-        if (syncResult) {
-          newRawMessages = syncResult.newMessages || [];
-          statusUpdates = syncResult.statusUpdates || [];
-          deletedIdsOnServer = syncResult.deletedIds || [];
-        }
-      }
+        let newRawMessages: any[] = [];
+        let statusUpdates: any[] = [];
+        let deletedIdsOnServer: string[] = [];
 
-      // 1. Decrypt any new messages
-      const decryptedNewMessages = await Promise.all(
-        newRawMessages.map(async (msg: any) => decryptSingleMessage(msg))
-      );
-
-      // 2. Update status of pending messages
-      const updatedPendingMessages = await Promise.all(
-        statusUpdates.map(async (update: any) => {
-          const originalMsg = realMessagesRef.current.find(m => m.id === update.id);
-          if (!originalMsg) return null;
-
-          // Merge updated fields
-          const merged = { ...originalMsg, ...update };
-
-          // If a message just got read/destroyed, recalculate selfDestructTimeRemaining
-          if (merged.isDestroyed) {
-            merged.decryptedText = null;
+        if (isFirstPoll) {
+          // Bootstrap: fetch latest 50 messages overall
+          const res = await fetch(`/api/messages?userId=${realUser.id}&limit=50`);
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            newRawMessages = data;
           }
+          isFirstPollRef.current = false;
+        } else {
+          // Find maximum timestamp of already loaded messages
+          const realMsgs = realMessagesRef.current.filter(m => !m.id.startsWith('temp-') && !m.id.startsWith('opt-'));
+          const lastSyncTimestamp = realMsgs.length > 0 
+            ? Math.max(...realMsgs.map(m => m.timestamp)) 
+            : 0;
 
-          let selfDestructTimeRemaining = merged.selfDestructDuration;
-          if (merged.isRead && merged.readAt !== null && merged.selfDestructDuration !== null) {
-            const elapsed = Math.floor((Date.now() - merged.readAt) / 1000);
-            selfDestructTimeRemaining = Math.max(0, merged.selfDestructDuration - elapsed);
-          }
-          merged.selfDestructTimeRemaining = selfDestructTimeRemaining;
+          // Pending messages: either unread, or self-destructing and not destroyed yet
+          const pendingIds = realMessagesRef.current
+            .filter(m => !m.isRead || (m.selfDestructDuration !== null && !m.isDestroyed))
+            .map(m => m.id)
+            .filter(id => !id.startsWith('temp-') && !id.startsWith('opt-'));
 
-          return merged;
-        })
-      );
+          const loadedIds = realMessagesRef.current
+            .slice(-20)
+            .map(m => m.id)
+            .filter(id => !id.startsWith('temp-') && !id.startsWith('opt-'));
 
-      // Now merge everything into state
-      setRealMessages((prevMessages) => {
-        // Filter out any messages that have been deleted on the server
-        let filteredPrev = prevMessages;
-        if (deletedIdsOnServer.length > 0) {
-          const deletedSet = new Set(deletedIdsOnServer);
-          filteredPrev = prevMessages.filter(m => !deletedSet.has(m.id));
-        }
-
-        // Create a map for easy lookup & replacement
-        const messageMap = new Map<string, any>(filteredPrev.map(m => [m.id, m]));
-
-        // Apply status updates
-        for (const updated of updatedPendingMessages) {
-          if (updated) {
-            messageMap.set(updated.id, updated);
+          const res = await fetch(`/api/messages/sync?userId=${realUser.id}&sinceTimestamp=${lastSyncTimestamp}&pendingIds=${pendingIds.join(',')}&loadedIds=${loadedIds.join(',')}&isFocused=${document.visibilityState === 'visible'}&hasCameraPermission=${getCameraPermissionSync()}&activeRecipientId=${activeRecipient?.id || ''}`);
+          const syncResult = await res.json();
+          
+          if (syncResult) {
+            newRawMessages = syncResult.newMessages || [];
+            statusUpdates = syncResult.statusUpdates || [];
+            deletedIdsOnServer = syncResult.deletedIds || [];
           }
         }
 
-        // Add new decrypted messages
-        for (const msg of decryptedNewMessages) {
-          messageMap.set(msg.id, msg);
-        }
-
-        const mergedList = Array.from(messageMap.values());
-        mergedList.sort((a, b) => a.timestamp - b.timestamp);
-
-        // Detect if any new message came in for notifications
-        const incomingNew = decryptedNewMessages.filter(m => 
-          m.recipientId === realUser.id && 
-          !prevMessages.some(prev => prev.id === m.id)
+        // 1. Decrypt any new messages
+        const decryptedNewMessages = await Promise.all(
+          newRawMessages.map(async (msg: any) => decryptSingleMessage(msg))
         );
 
-        if (!isFirstPoll && incomingNew.length > 0) {
-          const sender = usersList.find(u => u.id === incomingNew[0].senderId);
-          const senderName = sender ? sender.name : 'Một tác giả';
-          const notificationMsg = `Có bài viết mới trên báo Dân trí của tác giả ${senderName}!`;
+        // 2. Update status of pending messages
+        const updatedPendingMessages = await Promise.all(
+          statusUpdates.map(async (update: any) => {
+            const originalMsg = realMessagesRef.current.find(m => m.id === update.id);
+            if (!originalMsg) return null;
 
-          const isComputer = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-          const isVisible = document.visibilityState === 'visible';
+            // Merge updated fields
+            const merged = { ...originalMsg, ...update };
 
-          if (isVisible && isComputer) {
-            setWebNotification({
-              id: `notif-${Date.now()}`,
-              message: notificationMsg
-            });
-            playBeep('receive');
+            // Local destruction protection
+            if (originalMsg.isDestroyed) {
+              merged.isDestroyed = true;
+              merged.decryptedText = null;
+              merged.selfDestructTimeRemaining = 0;
+            }
+
+            // If a message just got read/destroyed, recalculate selfDestructTimeRemaining
+            if (merged.isDestroyed) {
+              merged.decryptedText = null;
+            }
+
+            let selfDestructTimeRemaining = merged.selfDestructDuration;
+            if (merged.isRead && merged.readAt !== null && merged.selfDestructDuration !== null) {
+              const elapsed = Math.floor((Date.now() - merged.readAt) / 1000);
+              selfDestructTimeRemaining = Math.max(0, merged.selfDestructDuration - elapsed);
+            }
+
+            // Proactively set to destroyed if selfDestructTimeRemaining has reached 0
+            if (merged.selfDestructDuration !== null && selfDestructTimeRemaining === 0) {
+              merged.isDestroyed = true;
+              merged.decryptedText = null;
+            }
+            merged.selfDestructTimeRemaining = selfDestructTimeRemaining;
+
+            return merged;
+          })
+        );
+
+        // Now merge everything into state
+        setRealMessages((prevMessages) => {
+          // Filter out any messages that have been deleted on the server
+          let filteredPrev = prevMessages;
+          if (deletedIdsOnServer.length > 0) {
+            const deletedSet = new Set(deletedIdsOnServer);
+            filteredPrev = prevMessages.filter(m => !deletedSet.has(m.id));
           }
 
-          if (!isVisible && 'Notification' in window) {
-            if (Notification.permission === 'granted') {
-              new Notification('Báo Dân trí', {
-                body: notificationMsg,
-                icon: '/icon.svg'
-              });
-            } else if (Notification.permission !== 'denied') {
-              Notification.requestPermission().then(permission => {
-                if (permission === 'granted') {
-                   new Notification('Báo Dân trí', {
-                    body: notificationMsg,
-                    icon: '/icon.svg'
-                  });
-                }
-              });
+          // Create a map for easy lookup & replacement
+          const messageMap = new Map<string, any>(filteredPrev.map(m => [m.id, m]));
+
+          // Apply status updates
+          for (const updated of updatedPendingMessages) {
+            if (updated) {
+              messageMap.set(updated.id, updated);
             }
           }
-        }
 
-        return mergedList;
-      });
+          // Add new decrypted messages
+          for (const msg of decryptedNewMessages) {
+            messageMap.set(msg.id, msg);
+          }
 
-      return {
-        hasNewMessages: newRawMessages.length > 0,
-        hasUpdates: statusUpdates.length > 0 || deletedIdsOnServer.length > 0
-      };
-    } catch (e) {
-      console.error('Error polling real messages:', e);
-      return { hasNewMessages: false, hasUpdates: false };
-    } finally {
-      isPollingRef.current = false;
-    }
+          const mergedList = Array.from(messageMap.values());
+          mergedList.sort((a, b) => a.timestamp - b.timestamp);
+
+          // Detect if any new message came in for notifications
+          const incomingNew = decryptedNewMessages.filter(m => 
+            m.recipientId === realUser.id && 
+            !prevMessages.some(prev => prev.id === m.id)
+          );
+
+          if (!isFirstPoll && incomingNew.length > 0) {
+            const sender = usersList.find(u => u.id === incomingNew[0].senderId);
+            const senderName = sender ? sender.name : 'Một tác giả';
+            const notificationMsg = `Có bài viết mới trên báo Dân trí của tác giả ${senderName}!`;
+
+            const isComputer = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const isVisible = document.visibilityState === 'visible';
+
+            if (isVisible && isComputer) {
+              setWebNotification({
+                id: `notif-${Date.now()}`,
+                message: notificationMsg
+              });
+              playBeep('receive');
+            }
+          }
+
+          return mergedList;
+        });
+      } catch (e) {
+        console.error('Error polling real messages:', e);
+      } finally {
+        isPollingRef.current = false;
+      }
+    }, 250);
   }, [realUser, realUserPrivateKey, usersList, playBeep, decryptSingleMessage]);
 
   const syncDevicePublicKeySpki = useCallback(async () => {
@@ -536,131 +555,230 @@ export default function useMessageLogic({
     }
   }, [realUser, setRealUser, addLog]);
 
-  // Poll loop with Adaptive Polling
-  useEffect(() => {
-    if (!realUser) return;
+  // Stable refs for callbacks to prevent SSE teardown and connection exhaustion on every render / keystroke
+  const pollMessagesRealRef = useRef(pollMessagesReal);
+  const fetchUsersRef = useRef(fetchUsers);
+  const fetchUsersStatusRef = useRef(fetchUsersStatus);
+  const syncDevicePublicKeySpkiRef = useRef(syncDevicePublicKeySpki);
+  const clearAllNotificationsRef = useRef(clearAllNotifications);
+  const autoCheckAndResubscribePushRef = useRef(autoCheckAndResubscribePush);
+  const onSSEUpdateRef = useRef(onSSEUpdate);
 
-    fetchUsers();
-    pollMessagesReal();
+  // Sync refs on each render
+  pollMessagesRealRef.current = pollMessagesReal;
+  fetchUsersRef.current = fetchUsers;
+  fetchUsersStatusRef.current = fetchUsersStatus;
+  syncDevicePublicKeySpkiRef.current = syncDevicePublicKeySpki;
+  clearAllNotificationsRef.current = clearAllNotifications;
+  autoCheckAndResubscribePushRef.current = autoCheckAndResubscribePush;
+  onSSEUpdateRef.current = onSSEUpdate;
+
+  // Real-time synchronization using Server-Sent Events (SSE)
+  useEffect(() => {
+    if (!realUser || !realUser.isAppUnlocked) return;
+
+    const currentUserId = realUser.id;
+
+    if (document.visibilityState === 'visible') {
+      fetchUsersRef.current();
+      pollMessagesRealRef.current();
+    }
     
     if (!hasSyncedKeysRef.current) {
-      syncDevicePublicKeySpki();
+      syncDevicePublicKeySpkiRef.current();
       hasSyncedKeysRef.current = true;
     }
     
     if (!hasSyncedPushRef.current) {
-      autoCheckAndResubscribePush();
+      autoCheckAndResubscribePushRef.current();
       hasSyncedPushRef.current = true;
     }
 
-    let timeoutId: any = null;
+    let eventSource: EventSource | null = null;
+    let userIntervalId: any = null;
 
-    const runPoll = async () => {
-      if (document.hasFocus()) {
-        const result = await pollMessagesReal();
-        const hasNewMsg = result?.hasNewMessages || false;
-        const hasUpd = result?.hasUpdates || false;
-
-        if (hasNewMsg) {
-          // Reset interval to 2 seconds immediately on new message
-          pollIntervalRef.current = 2000;
-          consecutiveNoMsgRef.current = 0;
-        } else {
-          // If no new messages, gradually increase from 2s -> 4s -> 6s -> up to 10s max
-          consecutiveNoMsgRef.current += 1;
-          if (consecutiveNoMsgRef.current > 5) {
-            pollIntervalRef.current = Math.min(10000, pollIntervalRef.current + 2000);
-          }
-        }
-      } else {
-        // If not focused, backoff immediately to 10 seconds to save server resources
-        pollIntervalRef.current = 10000;
-        consecutiveNoMsgRef.current = 0;
+    const connectSSE = () => {
+      if (eventSource) {
+        eventSource.close();
       }
 
-      timeoutId = setTimeout(runPoll, pollIntervalRef.current);
+      console.log(`[SSE] Establishing connection for user: ${currentUserId}`);
+      const sseUrl = `/api/messages/sync/stream?userId=${currentUserId}`;
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'update') {
+            console.log('[SSE] Received sync update event, syncing messages and users...');
+            pollMessagesRealRef.current();
+            fetchUsersStatusRef.current();
+            onSSEUpdateRef.current?.();
+          }
+        } catch (err) {
+          console.error('[SSE] Error parsing sync event:', err);
+        }
+      };
+
+      eventSource.onerror = (err) => {
+        console.warn('[SSE] Connection error/disconnected, EventSource will auto-retry...', err);
+      };
     };
 
-    // Start adaptive polling loop
-    timeoutId = setTimeout(runPoll, pollIntervalRef.current);
-
-    // Poll users every 10 seconds to reduce server load
-    const userInterval = setInterval(() => {
-      if (document.hasFocus()) {
-        fetchUsers();
+    const disconnectSSE = () => {
+      if (eventSource) {
+        console.log(`[SSE] Closing connection for user: ${currentUserId}`);
+        eventSource.close();
+        eventSource = null;
       }
-    }, 10000);
+    };
+
+    const startSync = () => {
+      disconnectSSE();
+      if (userIntervalId) clearInterval(userIntervalId);
+
+      if (document.visibilityState === 'visible') {
+        connectSSE();
+
+        // Periodically refresh the online status user list (e.g. green dots next to active chats)
+        // every 60 seconds (optimized from 20s). This is extremely light on the battery and bandwidth.
+        userIntervalId = setInterval(() => {
+          if (document.visibilityState === 'visible') {
+            fetchUsersStatusRef.current();
+          }
+        }, 60000);
+      }
+    };
+
+    const stopSync = () => {
+      disconnectSSE();
+      if (userIntervalId) {
+        clearInterval(userIntervalId);
+        userIntervalId = null;
+      }
+    };
+
+    if (document.visibilityState === 'visible') {
+      startSync();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        clearAllNotificationsRef.current();
+        fetchUsersRef.current();
+        pollMessagesRealRef.current();
+        startSync();
+      } else {
+        stopSync();
+      }
+    };
 
     const handleFocus = () => {
-      // Focus resets polling interval immediately
-      pollIntervalRef.current = 2000;
-      consecutiveNoMsgRef.current = 0;
-      
-      clearAllNotifications();
-      fetchUsers();
-      pollMessagesReal();
-
-      // Restart the loop with fast polling
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = setTimeout(runPoll, pollIntervalRef.current);
+      if (document.visibilityState === 'visible') {
+        clearAllNotificationsRef.current();
+        fetchUsersRef.current();
+        pollMessagesRealRef.current();
+        startSync();
+      }
     };
 
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      clearInterval(userInterval);
+      stopSync();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [realUser, activeRecipient?.id, fetchUsers, pollMessagesReal, syncDevicePublicKeySpki, clearAllNotifications, autoCheckAndResubscribePush]);
+  }, [realUser?.id, realUser?.isAppUnlocked]);
 
-  // Timer self destruct ticking loop
+  // Actively update focus status to the server when tab visibility/focus changes or active chat changes
   useEffect(() => {
-    const interval = setInterval(() => {
-      const activeMessages = realMessages;
-      if (activeMessages.length === 0) return;
+    if (!realUser?.id) return;
 
-      let changed = false;
-      const nextMessages = activeMessages.map((msg) => {
-        if (msg.isRead && msg.readAt !== null && msg.selfDestructDuration !== null && !msg.isDestroyed) {
-          changed = true;
-          const elapsed = Math.floor((Date.now() - msg.readAt) / 1000);
-          const remaining = Math.max(0, msg.selfDestructDuration - elapsed);
+    const updateFocus = (isFocused: boolean) => {
+      const payload = {
+        userId: realUser.id,
+        isFocused,
+        activeRecipientId: isFocused ? (activeRecipient?.id || '') : ''
+      };
+      
+      fetch('/api/messages/focus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch((err) => console.warn('[Focus] Active update failed:', err));
+    };
 
-          if (remaining === 0) {
-            playBeep('explode');
-            addLog(`[TỰ HỦY] Tin nhắn ID (${msg.id.substring(4, 9)}) tự hủy hoàn toàn trên RAM và cơ sở dữ liệu.`, 'warn');
-            
-            fetch('/api/messages/destroy', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ messageId: msg.id })
-            }).catch(console.error);
-            localStorage.removeItem(`securecrypt_sent_cache_${msg.id}`);
+    // Update focus state immediately on mount or activeRecipient change
+    const initiallyFocused = document.visibilityState === 'visible' && document.hasFocus();
+    updateFocus(initiallyFocused);
 
-            return {
-              ...msg,
+    const handleVisible = () => {
+      updateFocus(true);
+    };
+
+    const handleHidden = () => {
+      updateFocus(false);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleVisible();
+      } else {
+        handleHidden();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      handleVisible();
+    };
+
+    const handleWindowBlur = () => {
+      handleHidden();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('blur', handleWindowBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('blur', handleWindowBlur);
+      // Try to mark as unfocused on unmount
+      updateFocus(false);
+    };
+  }, [realUser?.id, activeRecipient?.id]);
+
+  // Active self destruct callback triggered by Component UI-Level Ticking
+  const handleSelfDestruct = useCallback((messageId: string) => {
+    setRealMessages((prevMessages) => {
+      const msg = prevMessages.find((m) => m.id === messageId);
+      if (!msg || msg.isDestroyed) return prevMessages;
+
+      playBeep('explode');
+      addLog(`[TỰ HỦY] Tin nhắn ID (${messageId.substring(4, 9)}) tự hủy hoàn toàn trên RAM và cơ sở dữ liệu.`, 'warn');
+
+      fetch('/api/messages/destroy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId }),
+      }).catch(console.error);
+
+      return prevMessages.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
               selfDestructTimeRemaining: 0,
               isDestroyed: true,
               decryptedText: null,
-            };
-          } else {
-            return {
-              ...msg,
-              selfDestructTimeRemaining: remaining,
-            };
-          }
-        }
-        return msg;
-      });
-
-      if (changed) {
-        setRealMessages(nextMessages);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [realMessages, playBeep, addLog]);
+            }
+          : m
+      );
+    });
+  }, [playBeep, addLog]);
 
   const processSendQueue = useCallback(async () => {
     if (isProcessingQueueRef.current) return;
@@ -724,9 +842,6 @@ export default function useMessageLogic({
           isMultiDevice: true
         };
 
-        const optimisticMsg = realMessagesRef.current.find(m => m.id === tempId);
-        const originalTimestamp = optimisticMsg ? optimisticMsg.timestamp : undefined;
-
         let res: Response | null = null;
         let attempt = 0;
         const maxRetries = 3;
@@ -756,8 +871,7 @@ export default function useMessageLogic({
                 recipientId: recipientId,
                 encryptedPayload,
                 selfDestructDuration: realSelfDestruct,
-                gdriveFileId: fileToSend ? fileToSend.fileId : null,
-                timestamp: originalTimestamp
+                gdriveFileId: fileToSend ? fileToSend.fileId : null
               })
             });
 
@@ -777,7 +891,6 @@ export default function useMessageLogic({
         }
 
         const dbMsg = await res.json();
-        localStorage.setItem(`securecrypt_sent_cache_${dbMsg.id}`, contentPayload);
 
         // Replace optimistic message with real message
         setRealMessages(prev => {
@@ -825,7 +938,11 @@ export default function useMessageLogic({
     if (e) e.preventDefault();
     if (!realUser || !activeRecipient) return;
 
-    const textToSend = realInput.trim();
+    let textToSend = realInput.trim();
+    const isShorthandEnabled = localStorage.getItem('securecrypt_enable_shorthand') === 'true';
+    if (isShorthandEnabled && textToSend) {
+      textToSend = autoCorrectText(textToSend);
+    }
     const imgToSend = attachedImageBase64;
     const fileToSend = attachedFile;
 
@@ -1044,6 +1161,7 @@ export default function useMessageLogic({
     handleSendRealMessage,
     handleRetryMessage,
     decryptSingleMessage,
-    syncDevicePublicKeySpki
+    syncDevicePublicKeySpki,
+    handleSelfDestruct
   };
 }

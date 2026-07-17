@@ -183,28 +183,39 @@ export default function usePwaAndNotifications({
 
     try {
       const reg = await navigator.serviceWorker.ready;
-      const existingSub = await reg.pushManager.getSubscription();
-      if (existingSub) {
+      let sub = await reg.pushManager.getSubscription();
+
+      if (sub) {
         setIsPushSubscribed(true);
-        return;
+        console.log('[PWA] Đã tìm thấy subscription có sẵn, tiến hành đồng bộ hóa với máy chủ...');
+      } else {
+        if (Notification.permission === 'denied') {
+          addLog('[PWA] Quyền nhận thông báo bị từ chối bởi người dùng.', 'warn');
+          return;
+        }
+
+        if (Notification.permission === 'default') {
+          addLog('[PWA] Đang yêu cầu quyền nhận thông báo...', 'info');
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') {
+            addLog('[PWA] Quyền nhận thông báo không được cấp.', 'warn');
+            return;
+          }
+        }
+
+        if (!vapidPublicKey) {
+          addLog('[PWA] Chưa tải được khóa công khai VAPID từ máy chủ.', 'warn');
+          return;
+        }
+
+        const subscribeOptions = {
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        };
+
+        sub = await reg.pushManager.subscribe(subscribeOptions);
       }
 
-      if (Notification.permission === 'denied') {
-        addLog('[PWA] Quyền nhận thông báo bị từ chối bởi người dùng.', 'warn');
-        return;
-      }
-
-      if (!vapidPublicKey) {
-        addLog('[PWA] Chưa tải được khóa công khai VAPID từ máy chủ.', 'warn');
-        return;
-      }
-
-      const subscribeOptions = {
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-      };
-
-      const sub = await reg.pushManager.subscribe(subscribeOptions);
       const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -407,6 +418,11 @@ export default function usePwaAndNotifications({
   const clearAllNotifications = async () => {
     if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
     try {
+      // Chủ động xóa số badge tức thì phía Client
+      if ('clearAppBadge' in navigator) {
+        await (navigator as any).clearAppBadge().catch(() => {});
+      }
+
       // 1. Dọn dẹp cục bộ qua Service Worker chính (ready)
       const reg = await navigator.serviceWorker.ready;
       if (reg.getNotifications) {

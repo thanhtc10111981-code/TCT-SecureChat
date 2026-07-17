@@ -2,8 +2,9 @@ import express from 'express';
 import path from 'path';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { db } from './src/db/index.ts';
+import { db, pool } from './src/db/index.ts';
 import { users, settings } from './src/db/schema.ts';
 import { eq } from 'drizzle-orm';
 import webpush from 'web-push';
@@ -15,7 +16,44 @@ import chatRoutes from './server/routesChat.ts';
 import adminRoutes from './server/routesAdmin.ts';
 import otherRoutes from './server/routesOther.ts';
 
-const PORT = 3000;
+// Global server error trace buffer for debugging on-prem DB connection
+export const globalServerErrors: string[] = [];
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  try {
+    const msg = args.map(arg => {
+      if (arg instanceof Error) {
+        return `${arg.message}\n${arg.stack}`;
+      }
+      if (typeof arg === 'object' && arg !== null) {
+        try {
+          return JSON.stringify(arg, Object.getOwnPropertyNames(arg));
+        } catch {
+          return String(arg);
+        }
+      }
+      return String(arg);
+    }).join(' ');
+    
+    globalServerErrors.unshift(`[${new Date().toLocaleString()}] ${msg}`);
+    if (globalServerErrors.length > 100) {
+      globalServerErrors.pop();
+    }
+  } catch (e) {
+    // Ignore buffer error
+  }
+  originalConsoleError(...args);
+};
+
+// Log unhandled rejections or uncaught exceptions
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection on Server:', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception on Server:', error);
+});
+
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Default initial users for seeding
 const DEFAULT_USERS = [
@@ -120,65 +158,7 @@ async function seedDatabase() {
 }
 
 // Global flag to hold database queries during startup cooldown
-let isDbCooldown = true;
-
-async function ensureProxyRunning() {
-  const sqlHost = process.env.SQL_HOST || '';
-  const connectionName = path.basename(sqlHost);
-  const customSocketDir = '/tmp/cloudsql';
-  const customHost = path.join(customSocketDir, connectionName);
-  const socketFile = path.join(customHost, '.s.PGSQL.5432');
-
-  console.log('[Proxy] Checking local Cloud SQL Proxy...');
-  console.log(`[Proxy] Target connection: ${connectionName}`);
-  console.log(`[Proxy] Custom socket file path: ${socketFile}`);
-
-  // Ensure tmp directory exists
-  fs.mkdirSync(customSocketDir, { recursive: true });
-
-  // Remove stale socket file if any
-  if (fs.existsSync(socketFile)) {
-    console.log('[Proxy] Removing stale socket file...');
-    try {
-      fs.unlinkSync(socketFile);
-    } catch (e) {
-      console.error('[Proxy] Failed to remove stale socket file:', e);
-    }
-  }
-
-  // Spawn Cloud SQL Proxy pointing to /tmp/cloudsql
-  console.log('[Proxy] Spawning fresh background Cloud SQL Proxy process...');
-  const proxyProcess = spawn('/app/cloud_sql_proxy', [
-    connectionName,
-    `--unix-socket=${customSocketDir}`,
-    '--sql-data',
-    '--sql-data-endpoint=sqladmin.googleapis.com',
-    '--sqladmin-api-endpoint=sqladmin.googleapis.com',
-    '--impersonate-service-account=service-803105501197@gcp-sa-run-ai.iam.gserviceaccount.com'
-  ], {
-    detached: true,
-    stdio: 'ignore'
-  });
-
-  proxyProcess.unref();
-
-  // Wait for socket file to be created (up to 10 seconds)
-  console.log('[Proxy] Waiting for proxy to listen on socket file...');
-  let socketReady = false;
-  for (let i = 0; i < 20; i++) {
-    if (fs.existsSync(socketFile)) {
-      socketReady = true;
-      break;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-
-  if (socketReady) {
-    console.log('[Proxy] Proxy started and socket file is ready!');
-  } else {
-    console.error('[Proxy] Warning: Timed out waiting for socket file to be created. Connection attempts may fail.');
-  }
-}
+let isDbCooldown = false;
 
 async function startServer() {
   const app = express();
@@ -198,19 +178,82 @@ async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
   if (isProd) {
-    console.log('[PostgreSQL] Running in production mode. Bypassing development proxy and cooldown.');
-    isDbCooldown = false;
+    console.log('[PostgreSQL] Running in production mode.');
   } else {
-    console.log('[PostgreSQL] Running in development mode. Initializing database proxy...');
-    await ensureProxyRunning();
-    isDbCooldown = false;
+    console.log('[PostgreSQL] Running in development mode using the pre-configured system database proxy.');
   }
 
-  // Seed database on server startup
-  await seedDatabase();
-  console.log('[PostgreSQL] Database connections fully initialized and open for requests.');
+  // Seed database on server startup asynchronously to prevent blocking server port binding / health checks
+  seedDatabase().then(() => {
+    console.log('[PostgreSQL] Database connections fully initialized and open for requests.');
+  }).catch(err => {
+    console.error('[PostgreSQL] Database seeding failed asynchronously:', err);
+  });
 
   // --- API ENDPOINTS (MODULAR ROUTING) ---
+  const verifyDebugPassword = (password: any): boolean => {
+    if (typeof password !== 'string') return false;
+    const inputHash = crypto.createHash('sha256').update(password).digest('hex');
+    const configuredHash = process.env.DEBUG_PASSWORD_HASH || 'ac50145ac8eb33b53c8d1dcc900755c216ec53ebbf77d8dca4f19dfb55337a35';
+    return inputHash === configuredHash;
+  };
+
+  app.post('/api/debug/error-trace', (req, res) => {
+    const { password, clear } = req.body;
+    if (!verifyDebugPassword(password)) {
+      return res.status(401).json({ error: 'Mật khẩu truy cập trace lỗi không đúng.' });
+    }
+    if (clear === true || clear === 'true') {
+      globalServerErrors.length = 0;
+      return res.json({ success: true, logs: [] });
+    }
+    return res.json({ logs: globalServerErrors });
+  });
+
+  app.post('/api/debug/query-db', async (req, res) => {
+    const { password, query, testConnection } = req.body;
+    if (!verifyDebugPassword(password)) {
+      return res.status(401).json({ error: 'Mật khẩu truy cập debug không đúng.' });
+    }
+
+    try {
+      if (testConnection) {
+        const startTime = Date.now();
+        const result = await pool.query('SELECT NOW() as now_time;');
+        const executionTimeMs = Date.now() - startTime;
+        return res.json({
+          success: true,
+          message: 'Kết nối CSDL thành công!',
+          timestamp: result.rows[0].now_time,
+          executionTimeMs
+        });
+      }
+
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: 'Câu lệnh SQL không hợp lệ.' });
+      }
+
+      const startTime = Date.now();
+      const result = await pool.query(query);
+      const executionTimeMs = Date.now() - startTime;
+
+      return res.json({
+        success: true,
+        command: result.command,
+        rowCount: result.rowCount,
+        rows: result.rows || [],
+        fields: (result.fields || []).map(f => ({ name: f.name, dataTypeID: f.dataTypeID })),
+        executionTimeMs
+      });
+    } catch (error: any) {
+      console.error('Debug query DB error:', error);
+      return res.status(400).json({
+        success: false,
+        error: error.stack || error.message || String(error)
+      });
+    }
+  });
+
   app.use('/api', userRoutes);
   app.use('/api', chatRoutes);
   app.use('/api', adminRoutes);

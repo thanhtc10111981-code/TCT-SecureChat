@@ -3,6 +3,8 @@ import { db, getCachedSettings, invalidateSettingsCache } from '../src/db/index.
 import { users, settings } from '../src/db/schema.ts';
 import { eq } from 'drizzle-orm';
 import webpush from 'web-push';
+import fs from 'fs';
+import path from 'path';
 import { getDriveAccessToken, uploadFileToDrive, downloadFileFromDrive } from './gdrive.ts';
 
 const router = express.Router();
@@ -82,7 +84,11 @@ router.get('/settings', async (req, res) => {
         gdriveClientSecret: '',
         gdriveRefreshToken: '',
         gdriveFolderId: '',
-        gdriveEnabled: false
+        gdriveEnabled: false,
+        isKeySharingEnabled: false,
+        systemShorthands: null,
+        disguiseArticleTitle: '',
+        disguiseArticleContent: ''
       }).onConflictDoNothing();
       invalidateSettingsCache();
       currentSettings = await getCachedSettings();
@@ -107,7 +113,11 @@ router.post('/settings', async (req, res) => {
       gdriveClientSecret,
       gdriveRefreshToken,
       gdriveFolderId,
-      gdriveEnabled
+      gdriveEnabled,
+      isKeySharingEnabled,
+      systemShorthands,
+      disguiseArticleTitle,
+      disguiseArticleContent
     } = req.body;
 
     const results = await db.select().from(settings).where(eq(settings.id, 1));
@@ -143,6 +153,18 @@ router.post('/settings', async (req, res) => {
     }
     if (typeof gdriveEnabled === 'boolean') {
       updateData.gdriveEnabled = gdriveEnabled;
+    }
+    if (typeof isKeySharingEnabled === 'boolean') {
+      updateData.isKeySharingEnabled = isKeySharingEnabled;
+    }
+    if (typeof systemShorthands === 'string' || systemShorthands === null) {
+      updateData.systemShorthands = systemShorthands;
+    }
+    if (typeof disguiseArticleTitle === 'string') {
+      updateData.disguiseArticleTitle = disguiseArticleTitle;
+    }
+    if (typeof disguiseArticleContent === 'string') {
+      updateData.disguiseArticleContent = disguiseArticleContent;
     }
 
     if (!currentSettings) {
@@ -248,12 +270,9 @@ router.post('/push/subscribe', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy người dùng.' });
     }
 
-    const subs = (user.pushSubscriptions as any[]) || [];
-    const exists = subs.some((s) => s.endpoint === subscription.endpoint);
-    if (!exists) {
-      subs.push(subscription);
-      await db.update(users).set({ pushSubscriptions: subs }).where(eq(users.id, userId));
-    }
+    // Chỉ lưu 1 subscription của thiết bị/lần đăng ký gần đây nhất để tránh tích lũy rác
+    const subs = [subscription];
+    await db.update(users).set({ pushSubscriptions: subs }).where(eq(users.id, userId));
 
     res.json({ success: true, message: 'Đã đăng ký nhận thông báo đẩy thành công!' });
   } catch (error: any) {
@@ -265,7 +284,11 @@ router.post('/push/subscribe', async (req, res) => {
 // Unsubscribe from push notifications
 router.post('/push/unsubscribe', async (req, res) => {
   try {
-    const { userId, endpoint } = req.body;
+    let { userId, endpoint, subscription } = req.body;
+    if (subscription && subscription.endpoint) {
+      endpoint = subscription.endpoint;
+    }
+    
     if (!userId || !endpoint) {
       return res.status(400).json({ error: 'Thiếu thông tin hủy đăng ký.' });
     }
@@ -387,6 +410,52 @@ router.post('/telegram/test', async (req, res) => {
 // Quick ping endpoint to pre-warm the connection/TCP sockets from client-side
 router.get('/ping', (req, res) => {
   res.json({ ok: true, timestamp: Date.now() });
+});
+
+// Endpoint to fetch notification debug logs
+router.get('/debug-notification-logs', (req, res) => {
+  try {
+    const filePath = path.join(process.cwd(), 'notification_debug.log');
+    if (!fs.existsSync(filePath)) {
+      return res.send('No notification debug logs found yet.');
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    res.type('text/plain').send(content);
+  } catch (err: any) {
+    res.status(500).send(`Error reading debug logs: ${err.message}`);
+  }
+});
+
+// Endpoint to fetch database users for debugging
+router.get('/debug-users', async (req, res) => {
+  try {
+    const usersList = await db.select().from(users);
+    const simplifiedUsers = usersList.map(u => ({
+      id: u.id,
+      username: u.username,
+      name: u.name,
+      telegramChatId: u.telegramChatId,
+      notificationPreferences: u.notificationPreferences,
+      pushSubscriptionsCount: ((u.pushSubscriptions as any[]) || []).length,
+      pushSubscriptions: (u.pushSubscriptions as any[]) || []
+    }));
+    res.json(simplifiedUsers);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint to clear debug logs
+router.post('/debug-notification-logs/clear', (req, res) => {
+  try {
+    const filePath = path.join(process.cwd(), 'notification_debug.log');
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    res.json({ success: true, message: 'Debug logs cleared successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 export default router;

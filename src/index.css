@@ -11,6 +11,11 @@
   --color-dantri-blue: #0d5cb6;
   --color-dantri-dark: #222222;
   --color-dantri-gray: #f4f5f6;
+  --color-jira-blue: #0052cc;
+  --color-jira-blue-hover: #0047b3;
+  --color-jira-slate: #172b4d;
+  --color-jira-gray: #f4f5f7;
+  --color-jira-border: #dfe1e6;
 }
 
 body {

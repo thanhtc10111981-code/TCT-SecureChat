@@ -9,15 +9,14 @@ export const users = pgTable('users', {
   avatar: text('avatar'),
   role: text('role').notNull().default('user'),
   publicKeySpki: text('public_key_spki'),
-  isBiometricRegistered: boolean('is_biometric_registered').default(false),
-  biometricType: text('biometric_type'),
   pinCode: text('pin_code'),
   friends: jsonb('friends').default([]), // List of friend user IDs
   telegramChatId: text('telegram_chat_id'),
   pushSubscriptions: jsonb('push_subscriptions').default([]), // Array of push subscriptions
   notificationPreferences: jsonb('notification_preferences').default({ webPush: true, telegram: true }), // Preferences config
   patternLock: text('pattern_lock'),
-  allowDelayLock: boolean('allow_delay_lock').default(false)
+  allowDelayLock: boolean('allow_delay_lock').default(false),
+  theme: text('theme').default('dantri')
 });
 
 // Messages Table
@@ -31,7 +30,8 @@ export const messages = pgTable('messages', {
   readAt: bigint('read_at', { mode: 'number' }),
   isRead: boolean('is_read').default(false),
   isDestroyed: boolean('is_destroyed').default(false),
-  gdriveFileId: text('gdrive_file_id')
+  gdriveFileId: text('gdrive_file_id'),
+  reactions: jsonb('reactions').default({})
 }, (table) => ({
   senderIdIdx: index('messages_sender_id_idx').on(table.senderId),
   recipientIdIdx: index('messages_recipient_id_idx').on(table.recipientId),
@@ -56,5 +56,9 @@ export const settings = pgTable('settings', {
   gdriveClientSecret: text('gdrive_client_secret').default(''),
   gdriveRefreshToken: text('gdrive_refresh_token').default(''),
   gdriveFolderId: text('gdrive_folder_id').default(''),
-  gdriveEnabled: boolean('gdrive_enabled').default(false)
+  gdriveEnabled: boolean('gdrive_enabled').default(false),
+  isKeySharingEnabled: boolean('is_key_sharing_enabled').default(false),
+  systemShorthands: text('system_shorthands'),
+  disguiseArticleTitle: text('disguise_article_title').default(''),
+  disguiseArticleContent: text('disguise_article_content').default('')
 });

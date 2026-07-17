@@ -39,12 +39,11 @@ router.post('/auth/login', async (req, res) => {
       avatar: user.avatar,
       role: user.role,
       publicKeySpki: user.publicKeySpki,
-      isBiometricRegistered: user.isBiometricRegistered,
-      biometricType: user.biometricType,
       telegramChatId: user.telegramChatId,
       patternLock: user.patternLock,
       hasPinCode: !!user.pinCode,
-      allowDelayLock: user.allowDelayLock
+      allowDelayLock: user.allowDelayLock,
+      theme: user.theme || 'dantri'
     });
   } catch (error: any) {
     console.error('Login error:', error);
@@ -82,6 +81,51 @@ router.post('/auth/verify-credential', async (req, res) => {
   } catch (error: any) {
     console.error('Verify credential error:', error);
     res.status(500).json({ error: 'Có lỗi hệ thống xảy ra.' });
+  }
+});
+
+// Get active users
+router.get('/users/status', async (req, res) => {
+  try {
+    const { userId, isFocused, hasCameraPermission } = req.query;
+    
+    if (userId && typeof userId === 'string') {
+      onlineUsers.set(userId, Date.now());
+      if (isFocused === 'true') {
+        focusedUsers.set(userId, Date.now());
+      } else {
+        focusedUsers.delete(userId);
+      }
+      if (hasCameraPermission !== undefined) {
+        cameraPermissionUsers.set(userId, hasCameraPermission === 'true');
+      }
+    }
+
+    // Determine target user IDs to return (friends list + self)
+    let friendIds: string[] = [];
+    if (userId && typeof userId === 'string') {
+      const results = await db.select().from(users).where(eq(users.id, userId));
+      const currentUser = results[0];
+      if (currentUser) {
+        friendIds = (currentUser.friends as string[]) || [];
+        friendIds.push(userId);
+      }
+    }
+
+    const targetIds = friendIds.length > 0 ? friendIds : Array.from(onlineUsers.keys());
+
+    const statusList = targetIds.map(uId => ({
+      id: uId,
+      isOnline: isUserOnline(uId),
+      isFocused: isUserFocused(uId),
+      lastSeen: onlineUsers.get(uId) || null,
+      hasCameraPermission: cameraPermissionUsers.get(uId) || false
+    }));
+
+    res.json(statusList);
+  } catch (error: any) {
+    console.error('Get users status error:', error);
+    res.status(500).json({ error: 'Không thể lấy trạng thái người dùng.' });
   }
 });
 
@@ -132,8 +176,6 @@ router.get('/users', async (req, res) => {
       avatar: u.avatar,
       role: u.role,
       publicKeySpki: u.publicKeySpki,
-      isBiometricRegistered: u.isBiometricRegistered,
-      biometricType: u.biometricType,
       telegramChatId: u.telegramChatId || null,
       friends: u.friends || [],
       patternLock: u.patternLock,
@@ -142,7 +184,8 @@ router.get('/users', async (req, res) => {
       isOnline: isUserOnline(u.id),
       isFocused: isUserFocused(u.id),
       lastSeen: onlineUsers.get(u.id) || null,
-      hasCameraPermission: cameraPermissionUsers.get(u.id) || false
+      hasCameraPermission: cameraPermissionUsers.get(u.id) || false,
+      theme: u.theme || 'dantri'
     }));
     res.json(safeUsers);
   } catch (error: any) {
@@ -193,12 +236,11 @@ router.post('/users/profile', async (req, res) => {
         role: updatedUser.role,
         avatar: updatedUser.avatar,
         publicKeySpki: updatedUser.publicKeySpki,
-        isBiometricRegistered: updatedUser.isBiometricRegistered,
-        biometricType: updatedUser.biometricType,
         telegramChatId: updatedUser.telegramChatId,
         patternLock: updatedUser.patternLock,
         hasPinCode: !!updatedUser.pinCode,
-        allowDelayLock: updatedUser.allowDelayLock
+        allowDelayLock: updatedUser.allowDelayLock,
+        theme: updatedUser.theme || 'dantri'
       }
     });
   } catch (err: any) {
@@ -310,7 +352,7 @@ router.post('/users/unlink-friend', async (req, res) => {
 // Admin creating a new user
 router.post('/users', async (req, res) => {
   try {
-    const { username, password, name, role, biometricType, pinCode, avatar, telegramChatId, patternLock, allowDelayLock } = req.body;
+    const { username, password, name, role, pinCode, avatar, telegramChatId, patternLock, allowDelayLock, theme } = req.body;
     
     if (!username || !password || !name) {
       return res.status(400).json({ error: 'Thiếu thông tin bắt buộc (username, password, name).' });
@@ -330,13 +372,12 @@ router.post('/users', async (req, res) => {
       role: role || 'user',
       avatar: avatar || `https://images.unsplash.com/photo-${['1535713875002-d1d0cf377fde', '1494790108377-be9c29b29330', '1570295999919-56ceb5ecca61', '1438761681033-6461ffad8d80'][Math.floor(Math.random() * 4)]}?w=100&auto=format&fit=crop&q=80`,
       publicKeySpki: null,
-      isBiometricRegistered: true,
-      biometricType: biometricType || 'fingerprint',
       pinCode: hashPin(pinCode || '1234'),
       friends: [],
       telegramChatId: telegramChatId ? telegramChatId.toString().trim() : null,
       patternLock: patternLock || null,
-      allowDelayLock: allowDelayLock !== undefined ? !!allowDelayLock : false
+      allowDelayLock: allowDelayLock !== undefined ? !!allowDelayLock : false,
+      theme: theme || 'dantri'
     };
 
     await db.insert(users).values(newUser);
@@ -348,12 +389,11 @@ router.post('/users', async (req, res) => {
       role: newUser.role,
       avatar: newUser.avatar,
       publicKeySpki: newUser.publicKeySpki,
-      isBiometricRegistered: newUser.isBiometricRegistered,
-      biometricType: newUser.biometricType,
       telegramChatId: newUser.telegramChatId,
       patternLock: newUser.patternLock,
       hasPinCode: !!newUser.pinCode,
-      allowDelayLock: newUser.allowDelayLock
+      allowDelayLock: newUser.allowDelayLock,
+      theme: newUser.theme
     };
 
     res.status(201).json({ success: true, user: safeNewUser });
@@ -366,7 +406,7 @@ router.post('/users', async (req, res) => {
 // Admin or user updating user details
 router.post('/users/update', async (req, res) => {
   try {
-    const { id, name, role, biometricType, pinCode, password, avatar, telegramChatId, requesterId, patternLock, allowDelayLock } = req.body;
+    const { id, name, role, pinCode, password, avatar, telegramChatId, requesterId, patternLock, allowDelayLock, theme } = req.body;
     
     if (!id) {
       return res.status(400).json({ error: 'Thiếu ID người dùng.' });
@@ -392,7 +432,6 @@ router.post('/users/update', async (req, res) => {
 
     const updateData: any = {};
     if (name) updateData.name = name;
-    if (biometricType) updateData.biometricType = biometricType;
     if (pinCode) updateData.pinCode = hashPin(pinCode);
     if (avatar) updateData.avatar = avatar;
     if (telegramChatId !== undefined) {
@@ -406,6 +445,9 @@ router.post('/users/update', async (req, res) => {
     }
     if (allowDelayLock !== undefined) {
       updateData.allowDelayLock = !!allowDelayLock;
+    }
+    if (theme !== undefined) {
+      updateData.theme = theme;
     }
 
     if (role) {
@@ -429,12 +471,11 @@ router.post('/users/update', async (req, res) => {
         role: updatedUser.role,
         avatar: updatedUser.avatar,
         publicKeySpki: updatedUser.publicKeySpki,
-        isBiometricRegistered: updatedUser.isBiometricRegistered,
-        biometricType: updatedUser.biometricType,
         telegramChatId: updatedUser.telegramChatId,
         patternLock: updatedUser.patternLock,
         hasPinCode: !!updatedUser.pinCode,
-        allowDelayLock: updatedUser.allowDelayLock
+        allowDelayLock: updatedUser.allowDelayLock,
+        theme: updatedUser.theme || 'dantri'
       }
     });
   } catch (error: any) {

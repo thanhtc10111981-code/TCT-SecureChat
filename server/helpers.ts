@@ -4,19 +4,20 @@ import crypto from 'crypto';
 export const onlineUsers = new Map<string, number>();
 export const focusedUsers = new Map<string, number>();
 export const cameraPermissionUsers = new Map<string, boolean>();
+export const activeConversations = new Map<string, string>(); // Key: userId, Value: activeRecipientId
 
 export function isUserOnline(userId: string): boolean {
   const lastSeen = onlineUsers.get(userId);
   if (!lastSeen) return false;
-  // If user polled or hit endpoint in last 6 seconds, consider online
-  return (Date.now() - lastSeen) < 6000;
+  // If user polled or hit endpoint in last 75 seconds, consider online (matches 60s client interval)
+  return (Date.now() - lastSeen) < 75000;
 }
 
 export function isUserFocused(userId: string): boolean {
   const lastFocused = focusedUsers.get(userId);
   if (!lastFocused) return false;
-  // If user registered focus in last 6 seconds, and is online, they are focused
-  return isUserOnline(userId) && (Date.now() - lastFocused) < 6000;
+  // If user registered focus in last 75 seconds, and is online, they are focused
+  return isUserOnline(userId) && (Date.now() - lastFocused) < 75000;
 }
 
 // Helper to hash password using SHA-256

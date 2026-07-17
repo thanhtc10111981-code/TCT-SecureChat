@@ -1,9 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, Search, Shield, Settings, Unlock, LogOut, MessageSquare, Plus, CheckCircle2, AlertCircle, Bell, User, Download
+  Users, 
+  Search, 
+  Shield, 
+  Settings, 
+  Unlock, 
+  LogOut, 
+  MessageSquare, 
+  Plus, 
+  CheckCircle2, 
+  AlertCircle, 
+  Bell, 
+  User, 
+  Download,
+  Folder,
+  Tag,
+  CheckSquare,
+  TrendingUp,
+  Activity,
+  Layers,
+  X
 } from 'lucide-react';
 import { UserSession, Message } from '../types';
 import { LastSeenStatus } from './LastSeenStatus';
+import { isKeySharingJson, encryptPrivateKeyWithPassword as encryptPrivateKeyWithPasswordShared } from '../utils/cryptoSharing';
+import { shiftObfuscate, shiftDeobfuscate } from '../utils/crypto';
 
 interface UserChatSidebarProps {
   usersList: UserSession[];
@@ -22,6 +43,9 @@ interface UserChatSidebarProps {
   lockDelay?: number;
   lockAtTimestamp?: number | null;
   updateLockDelayReal?: (delaySecs: number) => void;
+  isKeySharingEnabled?: boolean;
+  setRealUser?: React.Dispatch<React.SetStateAction<UserSession | null>>;
+  addLog?: (text: string, type?: 'info' | 'success' | 'warn' | 'crypto') => void;
 }
 
 export default function UserChatSidebar({
@@ -41,6 +65,9 @@ export default function UserChatSidebar({
   lockDelay = 0,
   lockAtTimestamp = null,
   updateLockDelayReal = () => {},
+  isKeySharingEnabled = false,
+  setRealUser,
+  addLog,
 }: UserChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
@@ -51,7 +78,155 @@ export default function UserChatSidebar({
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [isLockDropdownOpen, setIsLockDropdownOpen] = useState(false);
   const [timeLeftStr, setTimeLeftStr] = useState<string>('');
+  
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncPassword, setSyncPassword] = useState('');
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const needsSync = isKeySharingEnabled && 
+                    realUser && 
+                    !isKeySharingJson(realUser.publicKeySpki) && 
+                    !sessionStorage.getItem(`temp_auth_key_${realUser.id}`);
+
+  const handleTriggerManualSync = async () => {
+    if (!syncPassword) {
+      setSyncError('Vui lòng nhập mật khẩu tài khoản.');
+      return;
+    }
+    setSyncError(null);
+    setIsSyncing(true);
+    addLog?.(`[ĐỒNG BỘ CHỦ ĐỘNG] Tiến hành xác thực mật khẩu và đóng gói khóa riêng tư...`, 'info');
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: realUser.username, password: syncPassword })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        setSyncError(errorData.error || 'Xác thực mật khẩu không đúng.');
+        setIsSyncing(false);
+        addLog?.(`[ĐỒNG BỘ CHỦ ĐỘNG] Xác thực thất bại: Mật khẩu không chính xác.`, 'warn');
+        return;
+      }
+
+      const localPubSpki = localStorage.getItem(`securecrypt_pub_${realUser.id}`);
+      const storedPrivBase64 = localStorage.getItem(`securecrypt_priv_${realUser.id}`);
+
+      if (!localPubSpki || !storedPrivBase64) {
+        setSyncError('Không tìm thấy khóa cục bộ trên thiết bị này.');
+        setIsSyncing(false);
+        return;
+      }
+
+      const encPrivPayload = await encryptPrivateKeyWithPasswordShared(storedPrivBase64, syncPassword);
+      const dualKeyJson = JSON.stringify({
+        spki: localPubSpki,
+        encryptedPriv: JSON.parse(encPrivPayload)
+      });
+
+      const updateRes = await fetch('/api/users/publicKey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: realUser.id, 
+          publicKeySpki: dualKeyJson
+        })
+      });
+
+      if (!updateRes.ok) {
+        const errData = await updateRes.json();
+        setSyncError(errData.error || 'Lỗi lưu thông tin khóa lên máy chủ.');
+        setIsSyncing(false);
+        return;
+      }
+
+      sessionStorage.setItem(`temp_auth_key_${realUser.id}`, shiftObfuscate(syncPassword));
+
+      if (setRealUser) {
+        setRealUser(prev => prev ? { ...prev, publicKeySpki: dualKeyJson } : null);
+      }
+
+      addLog?.(`[ĐỒNG BỘ CHỦ ĐỘNG] Đã mã hóa và đồng bộ gói khóa E2EE chia sẻ lên máy chủ thành công!`, 'success');
+      setShowSyncModal(false);
+      setSyncPassword('');
+      setIsSyncing(false);
+
+    } catch (err) {
+      setSyncError('Có lỗi xảy ra trong quá trình mã hóa hoặc truyền tin.');
+      setIsSyncing(false);
+    }
+  };
+
+  const renderSyncModal = () => {
+    if (!showSyncModal) return null;
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden animate-fade-in flex flex-col">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-600">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight font-sans">XÁC MINH ĐỒNG BỘ</h3>
+                <p className="text-[8px] text-slate-400 mt-0.5 font-mono">SECURE KEY ENCRYPTION</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setShowSyncModal(false);
+                setSyncPassword('');
+                setSyncError(null);
+              }}
+              className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="p-4 space-y-3.5 text-left">
+            {syncError && (
+              <div className="bg-red-50 border border-red-200 text-red-800 p-2.5 rounded-xl text-[10px] leading-relaxed flex items-center gap-1.5 font-medium">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-600" />
+                <span>{syncError}</span>
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-500 leading-relaxed font-sans">
+              Để bảo vệ an toàn cho khóa riêng tư của bạn, hệ thống sẽ sử dụng mật khẩu đăng nhập của bạn để mã hóa khóa riêng tư (Private Key) trước khi lưu gói bảo mật đồng bộ lên máy chủ.
+            </p>
+
+            <div className="space-y-1 text-xs">
+              <label className="block text-[8.5px] text-slate-400 uppercase font-sans font-bold">Mật khẩu xác nhận tài khoản</label>
+              <input
+                type="password"
+                value={syncPassword}
+                onChange={(e) => setSyncPassword(e.target.value)}
+                placeholder="Nhập mật khẩu của bạn..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-dantri-green"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTriggerManualSync}
+              disabled={isSyncing}
+              className="w-full py-2 bg-dantri-green hover:bg-dantri-green-hover disabled:bg-slate-100 disabled:text-slate-400 text-white font-bold rounded-xl text-[10px] flex items-center justify-center gap-1 transition-all shadow-sm"
+            >
+              {isSyncing ? 'ĐANG ĐÓNG GÓI & ĐỒNG BỘ...' : 'XÁC NHẬN KÍCH HOẠT'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
   const isUserAdmin = realUser?.username === 'phong' || realUser?.role === 'admin';
+  const isJiraTheme = realUser?.theme === 'jira';
 
   useEffect(() => {
     if (!lockAtTimestamp || lockDelay <= 0) {
@@ -160,6 +335,361 @@ export default function UserChatSidebar({
     }
   };
 
+  // RENDER JIRA THEMED SIDEBAR
+  if (isJiraTheme) {
+    return (
+      <div className="w-full md:w-80 border-r border-[#dfe1e6] bg-white flex flex-col shrink-0 h-full text-[#172b4d]">
+        
+        {/* Header Profile Info in Jira Style */}
+        <div className="p-4 border-b border-[#dfe1e6] flex items-center justify-between bg-[#f4f5f7]">
+          <div className="flex items-center space-x-2.5">
+            <div className="relative">
+              <img 
+                src={realUser.avatar} 
+                alt={realUser.name} 
+                className="w-9 h-9 rounded-full object-cover border border-[#dfe1e6]" 
+              />
+              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white" />
+            </div>
+            <div className="text-left select-none">
+              <h4 className="text-xs font-bold text-jira-slate flex items-center gap-1 font-sans">
+                <span>{realUser.name}</span>
+                {realUser.role === 'admin' && (
+                  <span className="text-[7.5px] bg-[#deebff] border border-[#b3d4ff] text-[#0747a6] font-bold px-1.5 py-0.5 rounded uppercase">Admin</span>
+                )}
+              </h4>
+              <span className="text-[9px] text-[#5e6c84] font-sans tracking-wide block">Jira Project Lead</span>
+            </div>
+          </div>
+
+          {/* Tools for Jira Theme */}
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={onOpenProfileEdit}
+              className="p-1.5 rounded bg-white hover:bg-[#ebecf0] border border-[#dfe1e6] text-[#42526e] transition-all shadow-xs"
+              title="User Settings"
+            >
+              <User className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onOpenNotificationConfig}
+              className="p-1.5 rounded bg-white hover:bg-[#ebecf0] border border-[#dfe1e6] text-[#42526e] transition-all shadow-xs"
+              title="Notification Configuration"
+            >
+              <Bell className="w-3.5 h-3.5" />
+            </button>
+            {realUser.role === 'admin' && (
+              <button
+                onClick={() => setIsAdminPanelOpen(true)}
+                className="p-1.5 rounded bg-white hover:bg-[#ebecf0] border border-[#dfe1e6] text-[#42526e] transition-all shadow-xs"
+                title="Admin Administration"
+              >
+                <Settings className="w-3.5 h-3.5" />
+              </button>
+            )}
+            
+            {/* Auto Lock Delay */}
+            {realUser.allowDelayLock ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsLockDropdownOpen(!isLockDropdownOpen)}
+                  className={`p-1.5 rounded border transition-all shadow-xs flex items-center gap-1 ${
+                    lockDelay > 0 
+                      ? 'bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100' 
+                      : 'bg-white hover:bg-[#ebecf0] border-[#dfe1e6] text-[#42526e]'
+                  }`}
+                  title={`Auto Lock: ${lockDelay > 0 ? `${lockDelay / 60}m` : 'Immediate'}`}
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  {timeLeftStr && (
+                    <span className="text-[9px] font-mono font-bold leading-none select-none bg-amber-200/60 px-1 py-0.5 rounded text-amber-800">{timeLeftStr}</span>
+                  )}
+                </button>
+                
+                {isLockDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsLockDropdownOpen(false)} />
+                    <div className="absolute right-0 mt-1.5 w-48 bg-white border border-[#dfe1e6] rounded shadow-lg py-1 z-50 text-xs animate-fade-in text-left">
+                      <div className="px-2.5 py-1 text-[9px] font-bold font-mono text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">
+                        Auto Lock Delay
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateLockDelayReal(0);
+                          handleLockReal();
+                          setIsLockDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 font-bold text-red-600 flex items-center justify-between"
+                      >
+                        <span>Lock Now</span>
+                        {lockDelay === 0 && <span className="w-1.5 h-1.5 rounded-full bg-red-600" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateLockDelayReal(300);
+                          setIsLockDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700 font-medium flex items-center justify-between"
+                      >
+                        <span>After 5 mins</span>
+                        {lockDelay === 300 && <span className="w-1.5 h-1.5 rounded-full bg-jira-blue" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateLockDelayReal(1800);
+                          setIsLockDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700 font-medium flex items-center justify-between"
+                      >
+                        <span>After 30 mins</span>
+                        {lockDelay === 1800 && <span className="w-1.5 h-1.5 rounded-full bg-jira-blue" />}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={handleLockReal}
+                className="p-1.5 rounded bg-white hover:bg-[#ebecf0] border border-[#dfe1e6] text-[#42526e] transition-all shadow-xs"
+                title="Immediate Lock"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+              </button>
+            )}
+            
+            <button
+              onClick={handleLogoutReal}
+              className="p-1.5 rounded bg-white hover:bg-red-50 border border-[#dfe1e6] hover:border-red-200 text-slate-400 hover:text-red-600 transition-all shadow-xs"
+              title="Logout"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Search Input */}
+        <div className="p-3 border-b border-[#dfe1e6] bg-[#fafbfc]">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter active boards, assignees..."
+              className="w-full bg-white border border-[#dfe1e6] rounded px-3 py-1.5 pl-8 text-xs text-slate-800 focus:outline-none focus:border-[#0052cc] transition-colors"
+            />
+          </div>
+        </div>
+
+        {/* Sync Prompt */}
+        {needsSync && (
+          <div className="mx-3 mt-3 bg-[#deebff]/60 border border-[#b3d4ff] p-3 rounded text-left">
+            <p className="text-[10px] text-[#0747a6] leading-relaxed font-sans">
+              💡 <strong>Chia sẻ khóa bảo mật đã bật.</strong> Bạn có muốn đồng bộ khóa bảo mật của thiết bị này lên máy chủ để các thiết bị khác tự động nhận diện?
+            </p>
+            <button
+              onClick={() => {
+                setShowSyncModal(true);
+                setSyncError(null);
+                setSyncPassword('');
+              }}
+              className="mt-2 w-full bg-[#0052cc] hover:bg-[#0047b3] text-white font-bold text-[9px] py-1.5 px-2 rounded font-sans transition-all"
+            >
+              KÍCH HOẠT ĐỒNG BỘ THIẾT BỊ
+            </button>
+          </div>
+        )}
+
+        {/* Dynamic Jira Issue Backlog list */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-none">
+          <div className="flex items-center justify-between px-1 mb-1">
+            <span className="text-[10px] font-bold tracking-wider font-mono text-[#5e6c84] flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-jira-blue" />
+              <span>ACTIVE SPRINTS ({filteredUsers.length})</span>
+            </span>
+            <button
+              onClick={() => {
+                setIsAddFriendOpen(!isAddFriendOpen);
+                setAddFriendError(null);
+                setAddFriendSuccess(null);
+              }}
+              className="flex items-center gap-1 text-[9px] bg-[#deebff] hover:bg-[#b3d4ff] text-[#0747a6] font-bold px-2 py-1.5 rounded transition-all select-none"
+              title="Assign New Task/User"
+            >
+              <Plus className="w-2.5 h-2.5" />
+              <span>LINK USER</span>
+            </button>
+          </div>
+
+          {/* Add user form */}
+          {isAddFriendOpen && (
+            <div className="p-3 bg-white border border-[#dfe1e6] shadow-md rounded space-y-2.5 mb-3 text-left">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <span className="text-[9px] font-bold text-jira-blue uppercase font-mono">LINK EXTERNAL CONTRIBUTOR</span>
+                <button 
+                  type="button" 
+                  onClick={() => setIsAddFriendOpen(false)} 
+                  className="text-slate-400 hover:text-slate-600 text-[10px]"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {addFriendError && (
+                <div className="text-[9px] bg-red-50 border border-red-200 text-red-600 p-2 rounded">
+                  {addFriendError}
+                </div>
+              )}
+              {addFriendSuccess && (
+                <div className="text-[9px] bg-emerald-50 border border-emerald-200 text-emerald-700 p-2 rounded">
+                  {addFriendSuccess}
+                </div>
+              )}
+
+              <div className="space-y-1 text-xs">
+                <label className="block text-[8.5px] text-[#5e6c84] uppercase font-mono">Username</label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  value={friendUsername}
+                  onChange={(e) => setFriendUsername(e.target.value)}
+                  placeholder="Enter external username..."
+                  className="w-full bg-[#fafbfc] border border-[#dfe1e6] rounded px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-[#0052cc]"
+                />
+              </div>
+
+              <div className="space-y-1 text-xs">
+                <label className="block text-[8.5px] text-[#5e6c84] uppercase font-mono">Verification Password</label>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  style={{ WebkitTextSecurity: 'disc' } as any}
+                  value={friendPassword}
+                  onChange={(e) => setFriendPassword(e.target.value)}
+                  placeholder="Enter credential password..."
+                  className="w-full bg-[#fafbfc] border border-[#dfe1e6] rounded px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-[#0052cc]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleAddFriend()}
+                disabled={isAddingFriend}
+                className="w-full py-1.5 bg-jira-blue hover:bg-jira-blue-hover text-white font-bold rounded text-[10px] flex items-center justify-center gap-1 transition-all"
+              >
+                {isAddingFriend ? 'ESTABLISHING LINK...' : 'CONFIRM ASSIGNMENT'}
+              </button>
+            </div>
+          )}
+
+          {/* Render users as Jira issues */}
+          {sortedUsers.map((u, idx) => {
+            const relativeMsgs = [...realMessages]
+              .filter(
+                m => (m.senderId === u.id && m.recipientId === realUser.id) || 
+                     (m.senderId === realUser.id && m.recipientId === u.id)
+              )
+              .sort((a, b) => a.timestamp - b.timestamp);
+            const lastMsg = relativeMsgs[relativeMsgs.length - 1];
+            const isSelected = activeRecipient?.id === u.id;
+            const unreadCountForUser = realMessages.filter(
+              m => m.senderId === u.id && m.recipientId === realUser.id && !m.isRead
+            ).length;
+
+            // Generate structured mock Jira Ticket names based on usernames
+            const ticketKey = `SEC-${200 + idx}`;
+            const ticketSummary = `Private Chat Session with ${u.name}`;
+
+            return (
+              <div
+                key={u.id}
+                onClick={() => setActiveRecipient(u)}
+                className={`p-3 border rounded text-left transition-all relative cursor-pointer ${
+                  isSelected 
+                    ? 'bg-[#deebff]/80 border-[#2684ff] shadow-xs ring-1 ring-[#2684ff]/30' 
+                    : unreadCountForUser > 0
+                      ? 'bg-[#e3fcef] border-[#36b37e] hover:bg-[#e3fcef]/100'
+                      : 'bg-white hover:bg-[#fafbfc] border-[#dfe1e6]'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-1.5">
+                  <div className="flex items-center gap-1 font-mono text-[9px] font-bold text-[#0747a6]">
+                    <CheckSquare className="w-3 h-3 text-[#0052cc]" />
+                    <span>{ticketKey}</span>
+                  </div>
+                  
+                  {unreadCountForUser > 0 ? (
+                    <span className="px-1.5 py-0.5 text-[8px] font-bold bg-[#ff5252] text-white rounded font-mono uppercase animate-pulse">
+                      {unreadCountForUser} NEW
+                    </span>
+                  ) : (
+                    <span className="text-[8px] font-bold bg-[#dfe1e6] text-[#42526e] px-1 rounded uppercase font-mono">
+                      {u.role === 'admin' ? 'HIGH' : 'MEDIUM'}
+                    </span>
+                  )}
+                </div>
+
+                <h4 className="font-sans text-xs font-semibold text-slate-800 leading-normal mt-1 line-clamp-1">
+                  {ticketSummary}
+                </h4>
+
+                <div className="flex items-center justify-between mt-3 pt-2 border-t border-dashed border-slate-100">
+                  <div className="flex items-center gap-1 text-[9px] text-[#5e6c84]">
+                    <Activity className="w-3 h-3 text-slate-400 animate-pulse" />
+                    <span>
+                      {lastMsg 
+                        ? (lastMsg.isDestroyed ? 'Wiped' : (lastMsg.senderId === realUser.id ? 'Replied' : 'Pending'))
+                        : 'Initialized'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-[#5e6c84] font-medium font-sans">@{u.username}</span>
+                    <div className="relative shrink-0">
+                      <img 
+                        src={u.avatar} 
+                        alt={u.name} 
+                        className="w-5 h-5 rounded-full object-cover border border-slate-200" 
+                      />
+                      <LastSeenStatus user={u} isAdmin={isUserAdmin} variant="compact" />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
+
+          {filteredUsers.length === 0 && (
+            <div className="text-center py-10 px-4 bg-white border border-[#dfe1e6] rounded shadow-inner">
+              <AlertCircle className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-400">
+                {searchQuery ? 'No issues matching query.' : 'No assignees linked yet.'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Database Sync Label */}
+        <div className="p-3 bg-[#f4f5f7] border-t border-[#dfe1e6] select-none text-left">
+          <span className="text-[9px] text-[#5e6c84] block font-mono uppercase tracking-wider font-bold">DATABASE BACKLOG:</span>
+          <div className="flex items-center space-x-1 text-[9px] text-[#0747a6] font-sans mt-0.5 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Active Cloud Sync</span>
+          </div>
+        </div>
+        {renderSyncModal()}
+      </div>
+    );
+  }
+
+  // RENDER ORIGINAL DÂN TRÍ CAMOUFLAGE SIDEBAR
   return (
     <div className="w-full md:w-80 border-r border-slate-200 bg-[#fbfbfb] flex flex-col shrink-0 h-full text-slate-800">
       {/* Header Profile / Controls */}
@@ -331,6 +861,25 @@ export default function UserChatSidebar({
         </div>
       </div>
 
+      {/* Sync Prompt */}
+      {needsSync && (
+        <div className="mx-3 mt-3 bg-emerald-50 border border-emerald-200/80 p-3 rounded-2xl text-left shadow-xs animate-pulse">
+          <p className="text-[10px] text-emerald-800 leading-relaxed font-sans">
+            💡 <strong>Chia sẻ khóa bảo mật đã bật.</strong> Hãy kích hoạt đồng bộ thiết bị để gửi gói mã hóa khóa riêng tư lên máy chủ an toàn.
+          </p>
+          <button
+            onClick={() => {
+              setShowSyncModal(true);
+              setSyncError(null);
+              setSyncPassword('');
+            }}
+            className="mt-2 w-full bg-dantri-green hover:bg-dantri-green-hover text-white font-bold text-[9px] py-1.5 px-3 rounded-xl font-sans transition-all shadow-xs"
+          >
+            KÍCH HOẠT ĐỒNG BỘ THIẾT BỊ
+          </button>
+        </div>
+      )}
+
       {/* Contacts List Section */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-none">
         <div className="flex items-center justify-between px-1 mb-1">
@@ -384,11 +933,6 @@ export default function UserChatSidebar({
                 data-lpignore="true"
                 value={friendUsername}
                 onChange={(e) => setFriendUsername(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddFriend(e);
-                  }
-                }}
                 placeholder="Nhập tên tài khoản tác giả..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-slate-400"
               />
@@ -403,11 +947,6 @@ export default function UserChatSidebar({
                 style={{ WebkitTextSecurity: 'disc' } as any}
                 value={friendPassword}
                 onChange={(e) => setFriendPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddFriend(e);
-                  }
-                }}
                 placeholder="Nhập mật khẩu xác minh..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-slate-400"
               />
@@ -425,7 +964,6 @@ export default function UserChatSidebar({
         )}
 
         {sortedUsers.map((u) => {
-          // Find last message exchange
           const relativeMsgs = [...realMessages]
             .filter(
               m => (m.senderId === u.id && m.recipientId === realUser.id) || 
@@ -438,7 +976,6 @@ export default function UserChatSidebar({
             m => m.senderId === u.id && m.recipientId === realUser.id && !m.isRead
           ).length;
 
-          // Helper dynamic titles to camouflage the contacts as news columns
           const getCamouflageTitle = (userId: string, name: string) => {
             if (userId === 'phong') return `Chuyên khảo: Công nghệ xác thực sinh trắc học vật lý tại Việt Nam`;
             if (userId === 'linh') return `Nghiên cứu: Ứng dụng tự hủy mảng nhớ RAM chống mã độc khai thác`;
@@ -499,14 +1036,6 @@ export default function UserChatSidebar({
             <p className="text-xs text-slate-400 leading-relaxed">
               {searchQuery ? 'Không tìm thấy tác giả hoặc chủ đề phù hợp.' : 'Chưa có cộng tác viên nào khác kết nối.'}
             </p>
-            {realUser.role === 'admin' && (
-              <button
-                onClick={() => setIsAdminPanelOpen(true)}
-                className="mt-3.5 inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-dantri-green hover:text-dantri-green-hover text-[10px] font-bold font-sans px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-sm"
-              >
-                <Plus className="w-3 h-3" /> THÊM TÁC GIẢ MỚI
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -535,6 +1064,7 @@ export default function UserChatSidebar({
           <span>Hệ thống đồng bộ Thời gian thực (Live)</span>
         </div>
       </div>
+      {renderSyncModal()}
     </div>
   );
 }

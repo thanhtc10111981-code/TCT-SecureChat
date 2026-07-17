@@ -64,7 +64,7 @@ export default function FileAttachmentCard({ fileId, fileName, text, quoteBlock,
       {quoteBlock}
       <div 
         onClick={handleDownload} 
-        className={`flex items-center gap-3 bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl transition-colors ${
+        className={`file-card flex items-center gap-3 bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl transition-colors ${
           isSelectionModeActive ? 'pointer-events-none' : 'cursor-pointer hover:bg-slate-100/80'
         }`}
       >

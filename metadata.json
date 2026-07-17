@@ -1,6 +1,6 @@
 {
-  "name": "SecureCrypt Chat",
-  "description": "Ứng dụng trò chuyện bảo mật mã hóa đầu cuối (E2EE) với tin nhắn tự hủy và xác thực sinh trắc học vân tay/khuôn mặt.",
+  "name": "Dân trí",
+  "description": "Báo điện tử Dân trí - Tin tức Việt Nam & Thế giới nóng nhất, cập nhật liên tục 24h.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

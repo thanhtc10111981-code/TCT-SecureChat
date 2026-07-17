@@ -30,9 +30,9 @@ export default function PatternSetupComponent({
 
   // Read showStroke preference from localStorage based on userId
   const [showStroke, setShowStroke] = useState<boolean>(() => {
-    if (!userId) return true;
+    if (!userId) return false;
     const saved = localStorage.getItem(`pref_show_pattern_stroke_${userId}`);
-    return saved === null ? true : saved === 'true';
+    return saved === null ? false : saved === 'true';
   });
 
   const handleToggleStroke = (checked: boolean) => {

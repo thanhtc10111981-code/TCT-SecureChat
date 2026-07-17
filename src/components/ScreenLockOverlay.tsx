@@ -9,7 +9,7 @@ import { Key, Eye, EyeOff, Lock, BookOpen, WifiOff, ShieldAlert } from 'lucide-r
 import { UserSession } from '../types';
 import { Point, matchPattern } from '../lib/patternMatcher';
 
-interface BiometricOverlayProps {
+interface ScreenLockOverlayProps {
   user: UserSession;
   onAuthenticate: (userId: string) => void;
   onResetKeys?: (userId: string) => void;
@@ -19,7 +19,7 @@ interface BiometricOverlayProps {
   isPasswordEnabled?: boolean;
 }
 
-export default function BiometricOverlay({
+export default function ScreenLockOverlay({
   user,
   onAuthenticate,
   onResetKeys,
@@ -27,7 +27,7 @@ export default function BiometricOverlay({
   forcePasswordOnly,
   isPinEnabled = true,
   isPasswordEnabled = true,
-}: BiometricOverlayProps) {
+}: ScreenLockOverlayProps) {
   // Load user profile specific options
   const userPinPref = (() => {
     const saved = localStorage.getItem(`pref_auth_pin_${user.id}`);
@@ -73,7 +73,7 @@ export default function BiometricOverlay({
 
   const showStroke = (() => {
     const saved = localStorage.getItem(`pref_show_pattern_stroke_${user.id}`);
-    return saved === null ? true : saved === 'true';
+    return saved === null ? false : saved === 'true';
   })();
 
   // Reset states when user, defaultAuthMode or forcePasswordOnly changes

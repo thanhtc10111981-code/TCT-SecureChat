@@ -43,8 +43,6 @@ interface AdminPanelProps {
   setEditName: (val: string) => void;
   editRole: 'admin' | 'user';
   setEditRole: (val: 'admin' | 'user') => void;
-  editBiometric: 'fingerprint' | 'face';
-  setEditBiometric: (val: 'fingerprint' | 'face') => void;
   editPassword: string;
   setEditPassword: (val: string) => void;
   editPinCode: string;
@@ -57,6 +55,8 @@ interface AdminPanelProps {
   setEditPatternLock: (val: string) => void;
   editAllowDelayLock: boolean;
   setEditAllowDelayLock: (val: boolean) => void;
+  editTheme: string;
+  setEditTheme: (val: string) => void;
   handleAdminUpdateUser: () => void;
   newUsername: string;
   setNewUsername: (val: string) => void;
@@ -66,14 +66,14 @@ interface AdminPanelProps {
   setNewPassword: (val: string) => void;
   newRole: 'admin' | 'user';
   setNewRole: (val: 'admin' | 'user') => void;
-  newBiometric: 'fingerprint' | 'face';
-  setNewBiometric: (val: 'fingerprint' | 'face') => void;
   newPinCode: string;
   setNewPinCode: (val: string) => void;
   newTelegramChatId: string;
   setNewTelegramChatId: (val: string) => void;
   newAllowDelayLock: boolean;
   setNewAllowDelayLock: (val: boolean) => void;
+  newTheme: string;
+  setNewTheme: (val: string) => void;
   handleAdminCreateUser: (e?: any) => void;
   allUsersList: UserSession[];
   isAuthBioEnabled: boolean;
@@ -82,8 +82,18 @@ interface AdminPanelProps {
   handleToggleAuthPin: () => void;
   isAuthPwdEnabled: boolean;
   handleToggleAuthPwd: () => void;
+  isKeySharingEnabled: boolean;
+  handleToggleKeySharing: () => void;
   handleAdminUnlinkPair: (userAId: string, userBId: string) => void;
   handleAdminDeleteUser: (userId: string) => void;
+  disguiseArticleTitle: string;
+  setDisguiseArticleTitle: (val: string) => void;
+  disguiseArticleContent: string;
+  setDisguiseArticleContent: (val: string) => void;
+  isSavingDisguise: boolean;
+  saveDisguiseSuccessMsg: string | null;
+  saveDisguiseErrorMsg: string | null;
+  handleSaveDisguiseArticle: () => void;
 }
 
 export default function AdminPanel({
@@ -110,8 +120,6 @@ export default function AdminPanel({
   setEditName,
   editRole,
   setEditRole,
-  editBiometric,
-  setEditBiometric,
   editPassword,
   setEditPassword,
   editPinCode,
@@ -124,6 +132,8 @@ export default function AdminPanel({
   setEditPatternLock,
   editAllowDelayLock,
   setEditAllowDelayLock,
+  editTheme,
+  setEditTheme,
   handleAdminUpdateUser,
   newUsername,
   setNewUsername,
@@ -133,14 +143,14 @@ export default function AdminPanel({
   setNewPassword,
   newRole,
   setNewRole,
-  newBiometric,
-  setNewBiometric,
   newPinCode,
   setNewPinCode,
   newTelegramChatId,
   setNewTelegramChatId,
   newAllowDelayLock,
   setNewAllowDelayLock,
+  newTheme,
+  setNewTheme,
   handleAdminCreateUser,
   allUsersList,
   isAuthBioEnabled,
@@ -149,8 +159,18 @@ export default function AdminPanel({
   handleToggleAuthPin,
   isAuthPwdEnabled,
   handleToggleAuthPwd,
+  isKeySharingEnabled,
+  handleToggleKeySharing,
   handleAdminUnlinkPair,
-  handleAdminDeleteUser
+  handleAdminDeleteUser,
+  disguiseArticleTitle,
+  setDisguiseArticleTitle,
+  disguiseArticleContent,
+  setDisguiseArticleContent,
+  isSavingDisguise,
+  saveDisguiseSuccessMsg,
+  saveDisguiseErrorMsg,
+  handleSaveDisguiseArticle
 }: AdminPanelProps) {
   const [deletingUserId, setDeletingUserId] = React.useState<string | null>(null);
 
@@ -382,6 +402,184 @@ export default function AdminPanel({
         </div>
       </div>
 
+      {/* --- SECURITY & KEY SHARING CONFIGURATION AREA --- */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-5 text-left space-y-4 shadow-sm">
+        <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase font-mono tracking-wider">
+          <Shield className="w-3.5 h-3.5 text-[#005699]" />
+          <span>CẤU HÌNH BẢO MẬT & CHIA SẺ KHÓA HỆ THỐNG</span>
+        </h3>
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          Quản lý toàn cục các phương thức xác thực đầu cuối bắt buộc và kiểm soát tính năng đồng bộ hóa cặp khóa mật mã giữa các thiết bị của thành viên.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          {/* Sinh trắc */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <Fingerprint className="w-3.5 h-3.5 text-slate-500" />
+                Xác thực Sinh trắc
+              </span>
+              <p className="text-[9px] text-slate-400">Yêu cầu Touch ID / Face ID trên thiết bị vật lý.</p>
+            </div>
+            <button
+              onClick={handleToggleAuthBio}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAuthBioEnabled ? 'bg-[#005699]' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isAuthBioEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Mã PIN */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                Xác thực Mã PIN
+              </span>
+              <p className="text-[9px] text-slate-400">Cho phép xác minh nhanh qua mã số PIN.</p>
+            </div>
+            <button
+              onClick={handleToggleAuthPin}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAuthPinEnabled ? 'bg-[#005699]' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isAuthPinEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Mật khẩu */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <Key className="w-3.5 h-3.5 text-slate-500" />
+                Xác thực Mật khẩu
+              </span>
+              <p className="text-[9px] text-slate-400">Dùng mật khẩu tài khoản để mở khóa hộp thư.</p>
+            </div>
+            <button
+              onClick={handleToggleAuthPwd}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAuthPwdEnabled ? 'bg-[#005699]' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isAuthPwdEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Chia sẻ khóa */}
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                <Users className="w-3.5 h-3.5 text-slate-500" />
+                Chia sẻ Khóa Bí Mật
+              </span>
+              <p className="text-[9px] text-slate-400">Đồng bộ an toàn khóa riêng giữa các thiết bị.</p>
+            </div>
+            <button
+              onClick={handleToggleKeySharing}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isKeySharingEnabled ? 'bg-[#005699]' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  isKeySharingEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* --- DISGUISE ARTICLE CONFIGURATION AREA --- */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-5 text-left space-y-3 shadow-sm">
+        <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase font-mono tracking-wider">
+          <Edit2 className="w-3.5 h-3.5 text-[#005699]" />
+          <span>CẤU HÌNH BÀI BÁO NGỤY TRANG (DÂN TRÍ)</span>
+        </h3>
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          Tùy chỉnh tiêu đề và nội dung chi tiết của bài báo làm nền cho khung chat khi chạy chế độ ngụy trang. Khi để trống, hệ thống sẽ hiển thị bài báo mặc định về Mật mã học E2EE.
+        </p>
+
+        <div className="space-y-3 pt-1">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Tiêu đề bài báo ngụy trang
+            </label>
+            <input
+              type="text"
+              value={disguiseArticleTitle}
+              onChange={(e) => setDisguiseArticleTitle(e.target.value)}
+              placeholder="Ví dụ: Trí tuệ nhân tạo dự đoán Tây Ban Nha hay Argentina vô địch World Cup 2026..."
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/50 font-sans text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Nội dung chi tiết bài báo (mỗi dòng là một đoạn văn)
+            </label>
+            <textarea
+              value={disguiseArticleContent}
+              onChange={(e) => setDisguiseArticleContent(e.target.value)}
+              placeholder="Nhập nội dung chi tiết tại đây. Mỗi dòng mới sẽ là một đoạn văn bản trong bài báo ngụy trang."
+              rows={5}
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/50 font-sans leading-relaxed text-slate-800"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex-1 mr-4 text-left">
+              {saveDisguiseSuccessMsg && (
+                <span className="inline-flex text-[10px] text-green-600 font-semibold items-center gap-1 bg-green-50 px-2.5 py-1 rounded-lg border border-green-100">
+                  <Check className="w-3 h-3" />
+                  {saveDisguiseSuccessMsg}
+                </span>
+              )}
+              {saveDisguiseErrorMsg && (
+                <span className="inline-flex text-[10px] text-red-600 font-semibold bg-red-50 px-2.5 py-1 rounded-lg border border-red-100">
+                  {saveDisguiseErrorMsg}
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={handleSaveDisguiseArticle}
+              disabled={isSavingDisguise}
+              className="px-4 py-2 bg-[#005699] hover:bg-[#004073] text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50 cursor-pointer"
+            >
+              {isSavingDisguise ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Đang lưu...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Cập nhật bài viết</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* --- GOOGLE DRIVE STORAGE CONFIGURATION AREA --- */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-5 text-left space-y-3.5 shadow-sm">
         <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase font-mono tracking-wider">
@@ -536,7 +734,7 @@ export default function AdminPanel({
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[9px] uppercase font-mono text-amber-800 mb-1">Vai Trò</label>
                 <select
@@ -546,6 +744,17 @@ export default function AdminPanel({
                 >
                   <option value="user">Người dùng</option>
                   <option value="admin">Quản trị viên</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] uppercase font-mono text-amber-800 mb-1">Giao diện hiển thị</label>
+                <select
+                  value={editTheme}
+                  onChange={(e) => setEditTheme(e.target.value)}
+                  className="w-full bg-white border border-amber-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-amber-500"
+                >
+                  <option value="dantri">Báo Dân trí</option>
+                  <option value="jira">Jira Software</option>
                 </select>
               </div>
             </div>
@@ -724,7 +933,7 @@ export default function AdminPanel({
                 className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400"
               />
             </div>
-            <div className="grid grid-cols-1 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[9px] uppercase font-mono text-slate-500 mb-1">Vai Trò</label>
                 <select
@@ -734,6 +943,17 @@ export default function AdminPanel({
                 >
                   <option value="user">Người dùng</option>
                   <option value="admin">Quản trị viên</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[9px] uppercase font-mono text-slate-500 mb-1">Giao diện hiển thị</label>
+                <select
+                  value={newTheme}
+                  onChange={(e) => setNewTheme(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400"
+                >
+                  <option value="dantri">Báo Dân trí</option>
+                  <option value="jira">Jira Software</option>
                 </select>
               </div>
             </div>
@@ -832,13 +1052,13 @@ export default function AdminPanel({
                       setEditingUser(u);
                       setEditName(u.name);
                       setEditRole(u.role === 'admin' ? 'admin' : 'user');
-                      setEditBiometric(u.biometricType === 'face' ? 'face' : 'fingerprint');
                       setEditPinCode('');
                       setEditPassword('');
                       setEditAvatar(u.avatar || '');
                       setEditTelegramChatId(u.telegramChatId || '');
                       setEditPatternLock(u.patternLock || '');
                       setEditAllowDelayLock(!!u.allowDelayLock);
+                      setEditTheme(u.theme || 'dantri');
                       setAdminErrorMsg(null);
                       setAdminSuccessMsg(null);
                     }}

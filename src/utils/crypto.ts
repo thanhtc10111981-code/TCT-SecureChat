@@ -432,7 +432,7 @@ export function extractPublicKey(rawKey: string | null): string | null {
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      return parsed.publicKeySpki || parsed.pub || null;
+      return parsed.spki || parsed.publicKeySpki || parsed.pub || null;
     } catch {
       return rawKey;
     }
@@ -446,13 +446,51 @@ export function extractEncryptedPrivateKey(rawKey: string | null): string | null
   if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
-      return parsed.encryptedPrivateKey || parsed.encPriv || null;
+      const priv = parsed.encryptedPriv || parsed.encryptedPrivateKey || parsed.encPriv || null;
+      if (priv && typeof priv === 'object') {
+        return JSON.stringify(priv);
+      }
+      return priv;
     } catch {
       return null;
     }
   }
   return null;
 }
+
+/**
+ * Fast, lightweight character-shifting string obfuscation (Caesar cipher style + Base64)
+ * to hide plain text from browser session/local storage.
+ */
+export function shiftObfuscate(str: string, shift = 5): string {
+  if (!str) return str;
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const charCode = str.charCodeAt(i);
+    result += String.fromCharCode(charCode + shift);
+  }
+  return btoa(unescape(encodeURIComponent(result)));
+}
+
+/**
+ * Reverses the lightweight shift obfuscation.
+ */
+export function shiftDeobfuscate(obfuscated: string, shift = 5): string {
+  if (!obfuscated) return obfuscated;
+  try {
+    const decoded = decodeURIComponent(escape(atob(obfuscated)));
+    let result = '';
+    for (let i = 0; i < decoded.length; i++) {
+      const charCode = decoded.charCodeAt(i);
+      result += String.fromCharCode(charCode - shift);
+    }
+    return result;
+  } catch (e) {
+    console.warn('shiftDeobfuscate failed:', e);
+    return '';
+  }
+}
+
 
 
 

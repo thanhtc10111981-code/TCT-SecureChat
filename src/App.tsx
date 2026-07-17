@@ -57,7 +57,7 @@ import {
   importPrivateKey,
   EncryptedPayload
 } from './utils/crypto';
-import BiometricOverlay from './components/BiometricOverlay';
+import ScreenLockOverlay from './components/ScreenLockOverlay';
 import CryptoInspector from './components/CryptoInspector';
 import CameraModal from './components/CameraModal';
 import ScreenShield from './components/ScreenShield';
@@ -151,8 +151,6 @@ export default function App() {
     setNewName,
     newRole,
     setNewRole,
-    newBiometric,
-    setNewBiometric,
     newPinCode,
     setNewPinCode,
     adminSuccessMsg,
@@ -181,8 +179,6 @@ export default function App() {
     setEditName,
     editRole,
     setEditRole,
-    editBiometric,
-    setEditBiometric,
     editPinCode,
     setEditPinCode,
     editPassword,
@@ -197,6 +193,10 @@ export default function App() {
     setEditAllowDelayLock,
     newAllowDelayLock,
     setNewAllowDelayLock,
+    editTheme,
+    setEditTheme,
+    newTheme,
+    setNewTheme,
     isCameraOpen,
     setIsCameraOpen,
     isRealCamDropdownOpen,
@@ -247,6 +247,7 @@ export default function App() {
     pollMessagesReal,
     handleSendRealMessage,
     handleRetryMessage,
+    handleSelfDestruct,
     handleImageFileChange,
     handleCameraCapture,
     captureSilently,
@@ -272,6 +273,8 @@ export default function App() {
     handleToggleAuthBio,
     handleToggleAuthPin,
     handleToggleAuthPwd,
+    isKeySharingEnabled,
+    handleToggleKeySharing,
     handleAdminUnlinkPair,
     handleAdminDeleteUser,
     isCameraRequestingRef,
@@ -305,6 +308,14 @@ export default function App() {
     lockDelay,
     lockAtTimestamp,
     updateLockDelayReal,
+    disguiseArticleTitle,
+    setDisguiseArticleTitle,
+    disguiseArticleContent,
+    setDisguiseArticleContent,
+    isSavingDisguise,
+    saveDisguiseSuccessMsg,
+    saveDisguiseErrorMsg,
+    handleSaveDisguiseArticle,
   } = useAppLogic();
 
   // Local states for the two admin features integrated into the main categories menu
@@ -377,26 +388,33 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f5f6] text-slate-900 flex flex-col font-sans antialiased">
+    <div className={`min-h-screen ${
+      realUser && activeRecipient ? 'bg-white md:bg-[#f4f5f6]' : 'bg-[#f4f5f6]'
+    } text-slate-900 flex flex-col font-sans antialiased`}>
       
       {/* 1. TOP NEWS PORTAL HEADER (DÂN TRÍ CAMOUFLAGE) */}
-      <NewspaperHeader
-        realUser={realUser}
-        onOpenDeletePostings={() => setIsAdminDeletePostingsOpen(true)}
-        onOpenSqlQuery={() => setIsAdminSqlQueryOpen(true)}
-      />
+      <div className={realUser && activeRecipient ? "hidden md:block" : "block"}>
+        <NewspaperHeader
+          realUser={realUser}
+          onOpenDeletePostings={() => setIsAdminDeletePostingsOpen(true)}
+          onOpenSqlQuery={() => setIsAdminSqlQueryOpen(true)}
+          onLogout={handleLogoutReal}
+        />
+      </div>
 
       {/* Main Content Workspace */}
-      <main className={`flex-1 w-full mx-auto p-4 md:p-6 items-stretch ${
+      <main className={`flex-1 w-full mx-auto ${
+        realUser && activeRecipient ? 'p-0 md:p-6' : 'p-4 md:p-6'
+      } items-stretch ${
         realUser 
-          ? 'max-w-[1600px] flex flex-col space-y-6' 
+          ? `max-w-[1600px] flex flex-col ${realUser && activeRecipient ? 'space-y-0 md:space-y-6' : 'space-y-6'}` 
           : 'max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6'
       }`}>
         
         {/* LEFT / CENTER STAGE (Col 1 to 9, or full-width if in real chat mode) */}
-        <section className={realUser ? "flex-1 flex flex-col space-y-6" : "lg:col-span-9 flex flex-col space-y-6"}>
+        <section className={realUser ? `flex-1 flex flex-col ${activeRecipient ? 'space-y-0 md:space-y-6' : 'space-y-6'}` : "lg:col-span-9 flex flex-col space-y-6"}>
 
-            <div className="flex flex-col items-center justify-center py-4">
+            <div className={realUser && activeRecipient ? "w-full h-full flex flex-col" : "flex flex-col items-center justify-center py-4"}>
               
               {!realUser ? (
                 /* --- LOGIN VIEW --- */
@@ -473,7 +491,11 @@ export default function App() {
                 </div>
               ) : (
                 /* --- LOGGED IN USER INTERFACE (Full desktop workspace) --- */
-                <div className="relative mx-auto w-full bg-white rounded-3xl border border-slate-200 shadow-xl flex flex-col overflow-hidden h-[780px]">
+                <div className={`relative mx-auto w-full bg-white flex flex-col overflow-hidden ${
+                  activeRecipient 
+                    ? 'h-screen md:h-[780px] rounded-none border-0 shadow-none md:rounded-3xl md:border md:border-slate-200 md:shadow-xl' 
+                    : 'h-[780px] rounded-3xl border border-slate-200 shadow-xl'
+                }`}>
                     
                     {isAdminPanelOpen ? (
                       <AdminPanel
@@ -500,8 +522,6 @@ export default function App() {
                         setEditName={setEditName}
                         editRole={editRole}
                         setEditRole={setEditRole}
-                        editBiometric={editBiometric}
-                        setEditBiometric={setEditBiometric}
                         editPassword={editPassword}
                         setEditPassword={setEditPassword}
                         editPinCode={editPinCode}
@@ -514,6 +534,8 @@ export default function App() {
                         setEditPatternLock={setEditPatternLock}
                         editAllowDelayLock={editAllowDelayLock}
                         setEditAllowDelayLock={setEditAllowDelayLock}
+                        editTheme={editTheme}
+                        setEditTheme={setEditTheme}
                         handleAdminUpdateUser={handleAdminUpdateUser}
                         newUsername={newUsername}
                         setNewUsername={setNewUsername}
@@ -523,14 +545,14 @@ export default function App() {
                         setNewPassword={setNewPassword}
                         newRole={newRole}
                         setNewRole={setNewRole}
-                        newBiometric={newBiometric}
-                        setNewBiometric={setNewBiometric}
                         newPinCode={newPinCode}
                         setNewPinCode={setNewPinCode}
                         newTelegramChatId={newTelegramChatId}
                         setNewTelegramChatId={setNewTelegramChatId}
                         newAllowDelayLock={newAllowDelayLock}
                         setNewAllowDelayLock={setNewAllowDelayLock}
+                        newTheme={newTheme}
+                        setNewTheme={setNewTheme}
                         handleAdminCreateUser={handleAdminCreateUser}
                         allUsersList={allUsersList}
                         isAuthBioEnabled={isAuthBioEnabled}
@@ -539,12 +561,26 @@ export default function App() {
                         handleToggleAuthPin={handleToggleAuthPin}
                         isAuthPwdEnabled={isAuthPwdEnabled}
                         handleToggleAuthPwd={handleToggleAuthPwd}
+                        isKeySharingEnabled={isKeySharingEnabled}
+                        handleToggleKeySharing={handleToggleKeySharing}
                         handleAdminUnlinkPair={handleAdminUnlinkPair}
                         handleAdminDeleteUser={handleAdminDeleteUser}
+                        disguiseArticleTitle={disguiseArticleTitle}
+                        setDisguiseArticleTitle={setDisguiseArticleTitle}
+                        disguiseArticleContent={disguiseArticleContent}
+                        setDisguiseArticleContent={setDisguiseArticleContent}
+                        isSavingDisguise={isSavingDisguise}
+                        saveDisguiseSuccessMsg={saveDisguiseSuccessMsg}
+                        saveDisguiseErrorMsg={saveDisguiseErrorMsg}
+                        handleSaveDisguiseArticle={handleSaveDisguiseArticle}
                       />
                     ) : (
                       /* --- REAL CHAT SPLIT-PANE WORKSPACE --- */
-                      <div className="flex-1 flex overflow-hidden bg-white rounded-3xl border border-slate-200 h-full">
+                      <div className={`flex-1 flex overflow-hidden bg-white h-full ${
+                        activeRecipient 
+                          ? 'rounded-none border-0 md:rounded-3xl md:border md:border-slate-200' 
+                          : 'rounded-3xl border border-slate-200'
+                      }`}>
                         {/* 1. Left UserChatSidebar: visible on desktop, or on mobile when no active conversation */}
                         <div className={`${activeRecipient ? 'hidden md:flex' : 'flex'} w-full md:w-80 shrink-0 h-full`}>
                           <UserChatSidebar
@@ -564,6 +600,9 @@ export default function App() {
                             lockDelay={lockDelay}
                             lockAtTimestamp={lockAtTimestamp}
                             updateLockDelayReal={updateLockDelayReal}
+                            isKeySharingEnabled={isKeySharingEnabled}
+                            setRealUser={setRealUser}
+                            addLog={addLog}
                           />
                         </div>
 
@@ -619,8 +658,11 @@ export default function App() {
                               prefTelegram={prefTelegram}
                               handleTogglePrefTelegram={handleTogglePrefTelegram}
                               setRealMessages={setRealMessages}
+                              handleSelfDestruct={handleSelfDestruct}
                               usersList={usersList}
                               setUsersList={setUsersList}
+                              disguiseArticleTitle={disguiseArticleTitle}
+                              disguiseArticleContent={disguiseArticleContent}
                             />
                           ) : (
                             /* --- CHAT PLACEHOLDER SCREEN --- */
@@ -993,9 +1035,9 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Biometric lock screens for real user */}
-                    {!realUser.isBiometricAuthenticated && (
-                      <BiometricOverlay
+                    {/* Screen lock screens for real user */}
+                    {!realUser.isAppUnlocked && (
+                      <ScreenLockOverlay
                         user={realUser}
                         onAuthenticate={handleAuthenticateReal}
                         onResetKeys={handleResetKeysReal}
@@ -1012,7 +1054,9 @@ export default function App() {
             </div>
 
           {/* THỜI BÁO AN NINH SỐ EDITORIAL SECTION */}
-          <div className="bg-white border border-slate-200/95 rounded-3xl p-6 space-y-6 mt-6 shadow-sm">
+          <div className={`bg-white border border-slate-200/95 rounded-3xl p-6 space-y-6 mt-6 shadow-sm ${
+            realUser && activeRecipient ? 'hidden md:block' : 'block'
+          }`}>
             <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
               <div className="w-10 h-10 rounded-xl bg-[#005699]/10 border border-[#005699]/20 flex items-center justify-center text-[#005699] shrink-0">
                 <Newspaper className="w-5 h-5" />
@@ -1328,7 +1372,9 @@ export default function App() {
       />
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-4 px-6 mt-auto text-center text-[10px] text-slate-600 font-mono">
+      <footer className={`border-t border-slate-900 bg-slate-950 py-4 px-6 mt-auto text-center text-[10px] text-slate-600 font-mono ${
+        realUser && activeRecipient ? 'hidden md:block' : 'block'
+      }`}>
         <p>© 2026 SecureCrypt E2EE Hub. Tất cả dữ liệu và khóa giải mã được cô lập tuyệt đối trên thiết bị của người dùng.</p>
       </footer>
     </div>

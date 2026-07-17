@@ -1,5 +1,5 @@
-// Service Worker for Dân trí PWA
-const CACHE_NAME = 'dantri-e2ee-v1';
+// Service Worker for Jira Software PWA
+const CACHE_NAME = 'jira-software-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -78,12 +78,79 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Compact IndexedDB Helper for badges
+function getBadgeDB() {
+  return new Promise((resolve) => {
+    const request = indexedDB.open('jira-pwa-badge-db', 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('badgeStore')) {
+        db.createObjectStore('badgeStore');
+      }
+    };
+    request.onsuccess = (e) => resolve(e.target.result);
+    request.onerror = () => resolve(null);
+  });
+}
+
+async function getBadgeCount() {
+  const db = await getBadgeDB();
+  if (!db) return 0;
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction('badgeStore', 'readonly');
+      const store = transaction.objectStore('badgeStore');
+      const request = store.get('count');
+      request.onsuccess = () => resolve(request.result || 0);
+      request.onerror = () => resolve(0);
+    } catch (e) {
+      resolve(0);
+    }
+  });
+}
+
+async function updateBadgeCount(count) {
+  const db = await getBadgeDB();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const transaction = db.transaction('badgeStore', 'readwrite');
+      const store = transaction.objectStore('badgeStore');
+      const request = store.put(count, 'count');
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+    } catch (e) {
+      resolve();
+    }
+  });
+}
+
+async function incrementBadgeCount() {
+  const current = await getBadgeCount();
+  const next = current + 1;
+  await updateBadgeCount(next);
+  if ('setAppBadge' in navigator) {
+    await navigator.setAppBadge(next).catch(() => {});
+  } else if ('setAppBadge' in self) {
+    await self.setAppBadge(next).catch(() => {});
+  }
+}
+
+async function resetBadgeCount() {
+  await updateBadgeCount(0);
+  if ('clearAppBadge' in navigator) {
+    await navigator.clearAppBadge().catch(() => {});
+  } else if ('clearAppBadge' in self) {
+    await self.clearAppBadge().catch(() => {});
+  }
+}
+
 // Push Notification Event
 self.addEventListener('push', (event) => {
-  let title = 'Báo Dân trí';
-  let body = 'Bài đăng mới';
+  let title = 'Jira Software';
+  let body = 'Thông báo mới';
   let icon = '/icon.svg';
-  let tag = 'dantri-new-message';
+  let tag = 'jira-new-message';
 
   if (event.data) {
     try {
@@ -112,7 +179,10 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    Promise.all([
+      self.registration.showNotification(title, options),
+      incrementBadgeCount()
+    ])
   );
 });
 
@@ -143,13 +213,16 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.action === 'clear-notifications') {
     event.waitUntil(
-      self.registration.getNotifications().then((notifications) => {
-        if (notifications && notifications.length > 0) {
-          notifications.forEach((notification) => {
-            notification.close();
-          });
-        }
-      })
+      Promise.all([
+        self.registration.getNotifications().then((notifications) => {
+          if (notifications && notifications.length > 0) {
+            notifications.forEach((notification) => {
+              notification.close();
+            });
+          }
+        }),
+        resetBadgeCount()
+      ])
     );
   }
 });
