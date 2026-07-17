@@ -90,21 +90,21 @@ export const LastSeenStatus: React.FC<LastSeenStatusProps> = ({
 
   // Full detailed display for ChatArea header
   return (
-    <p className="text-[9px] mt-0.5 leading-none flex items-center gap-1">
+    <p className="text-[9.5px] mt-0.5 leading-none flex items-center gap-1">
       {user.isFocused ? (
         <>
           <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-emerald-600 font-medium">Đang hoạt động (on focus)</span>
+          <span className="text-emerald-700 font-bold">Đang hoạt động (on focus)</span>
         </>
       ) : user.isOnline ? (
         <>
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
-          <span className="text-amber-500">Chạy ngầm (mất tập trung)</span>
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span className="text-amber-700 font-bold">Chạy ngầm (mất tập trung)</span>
         </>
       ) : (
         <>
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300" />
-          <span className="text-slate-400">{formatLastSeen(user.lastSeen)}</span>
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-400" />
+          <span className="text-slate-600 font-bold">{formatLastSeen(user.lastSeen)}</span>
         </>
       )}
     </p>
