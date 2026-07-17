@@ -678,6 +678,10 @@ export default function UserChatSidebar({
                   {ticketSummary}
                 </h4>
 
+                <div className="mt-1">
+                  <LastSeenStatus user={u} isAdmin={isUserAdmin} variant="full" />
+                </div>
+
                 <div className="flex items-center justify-between mt-3 pt-2 border-t border-dashed border-slate-100">
                   <div className="flex items-center gap-1 text-[9px] text-[#5e6c84]">
                     <Activity className="w-3 h-3 text-slate-400 animate-pulse" />
@@ -1087,6 +1091,9 @@ export default function UserChatSidebar({
                 <h4 className="font-serif text-xs font-bold text-slate-800 leading-snug line-clamp-2 hover:text-dantri-green transition-colors">
                   {getCamouflageTitle(u.id, u.name)}
                 </h4>
+                <div className="mt-1">
+                  <LastSeenStatus user={u} isAdmin={isUserAdmin} variant="full" />
+                </div>
                 <div className="flex items-center justify-between mt-1.5 text-[9px] text-slate-450 font-sans">
                   <span className="font-medium truncate max-w-[100px] text-slate-500">B.tập: {u.name}</span>
                   <div className="flex items-center gap-1.5">

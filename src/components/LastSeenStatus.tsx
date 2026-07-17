@@ -3,7 +3,7 @@ import { UserSession } from '../types';
 
 interface LastSeenStatusProps {
   user: UserSession;
-  isAdmin: boolean;
+  isAdmin?: boolean;
   variant?: 'compact' | 'full' | 'tiny';
 }
 
