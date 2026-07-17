@@ -552,18 +552,7 @@ router.post('/messages/destroy', async (req, res) => {
         });
       }
 
-      await db.update(messages)
-        .set({
-          isDestroyed: true,
-          encryptedPayload: {
-            ciphertext: '',
-            encryptedKey: '',
-            iv: '',
-            isMockPayload: false
-          },
-          gdriveFileId: null
-        })
-        .where(eq(messages.id, messageId));
+      await db.delete(messages).where(eq(messages.id, messageId));
 
       notifyUserUpdate(msg.senderId);
       notifyUserUpdate(msg.recipientId);

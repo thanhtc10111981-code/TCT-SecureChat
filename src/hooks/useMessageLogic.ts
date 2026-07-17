@@ -480,7 +480,8 @@ export default function useMessageLogic({
             messageMap.set(msg.id, msg);
           }
 
-          const mergedList = Array.from(messageMap.values());
+          const mergedList = Array.from(messageMap.values())
+            .filter(m => !m.isDestroyed && !(m.selfDestructDuration !== null && m.selfDestructTimeRemaining === 0));
           mergedList.sort((a, b) => a.timestamp - b.timestamp);
 
           // Detect if any new message came in for notifications
@@ -755,7 +756,7 @@ export default function useMessageLogic({
   const handleSelfDestruct = useCallback((messageId: string) => {
     setRealMessages((prevMessages) => {
       const msg = prevMessages.find((m) => m.id === messageId);
-      if (!msg || msg.isDestroyed) return prevMessages;
+      if (!msg) return prevMessages;
 
       playBeep('explode');
       addLog(`[TỰ HỦY] Tin nhắn ID (${messageId.substring(4, 9)}) tự hủy hoàn toàn trên RAM và cơ sở dữ liệu.`, 'warn');
@@ -766,16 +767,7 @@ export default function useMessageLogic({
         body: JSON.stringify({ messageId }),
       }).catch(console.error);
 
-      return prevMessages.map((m) =>
-        m.id === messageId
-          ? {
-              ...m,
-              selfDestructTimeRemaining: 0,
-              isDestroyed: true,
-              decryptedText: null,
-            }
-          : m
-      );
+      return prevMessages.filter((m) => m.id !== messageId);
     });
   }, [playBeep, addLog]);
 
