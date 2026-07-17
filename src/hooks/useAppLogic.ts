@@ -1020,7 +1020,7 @@ export default function useAppLogic() {
       const interval = setInterval(() => {
         document.title = showAlt 
           ? `🔴 (${unreadCount || '!'}) TIN NHẮN MỚI!` 
-          : `💬 (${unreadCount}) Jira Software`;
+          : `💬 (${unreadCount}) Dân trí`;
         showAlt = !showAlt;
       }, 800);
       return () => {
@@ -1028,9 +1028,9 @@ export default function useAppLogic() {
       };
     } else {
       if (unreadCount > 0) {
-        document.title = `(${unreadCount}) Jira Software`;
+        document.title = `(${unreadCount}) Dân trí`;
       } else {
-        document.title = 'Jira Software';
+        document.title = 'Dân trí';
       }
     }
   }, [unreadCount, webNotification]);

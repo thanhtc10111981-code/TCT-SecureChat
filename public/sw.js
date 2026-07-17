@@ -1,5 +1,5 @@
-// Service Worker for Jira Software PWA
-const CACHE_NAME = 'jira-software-v1';
+// Service Worker for Dân trí PWA
+const CACHE_NAME = 'dantri-pwa-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -147,7 +147,7 @@ async function resetBadgeCount() {
 
 // Push Notification Event
 self.addEventListener('push', (event) => {
-  let title = 'Jira Software';
+  let title = 'Dân trí';
   let body = 'Thông báo mới';
   let icon = '/icon.svg';
   let tag = 'jira-new-message';
