@@ -339,11 +339,19 @@ export default function App() {
   };
 
   const formatDestructLabel = (sec: number | null): string => {
-    if (sec === null) return 'Tắt tự hủy';
+    if (sec === null) return 'Tắt';
+    if (sec === 1) return '1 giây';
+    if (sec === 2) return '2 giây';
+    if (sec === 3) return '3 giây';
+    if (sec === 4) return '4 giây';
+    if (sec === 5) return '5 giây';
     if (sec === 10) return '10 giây';
-    if (sec === 300) return '5 phút';
-    if (sec === 86400) return '24 giờ';
-    if (sec === 604800) return '7 ngày';
+    if (sec === 15) return '15 giây';
+    if (sec === 30) return '30 giây';
+    if (sec === 60) return '1 phút';
+    if (sec === 3600) return '1 giờ';
+    if (sec === 86400) return '1 ngày';
+    if (sec === 604800) return '1 tuần';
     return `${sec} giây`;
   };
 
@@ -399,6 +407,8 @@ export default function App() {
           onOpenDeletePostings={() => setIsAdminDeletePostingsOpen(true)}
           onOpenSqlQuery={() => setIsAdminSqlQueryOpen(true)}
           onLogout={handleLogoutReal}
+          showSecurityHub={showSecurityHub}
+          setShowSecurityHub={setShowSecurityHub}
         />
       </div>
 
@@ -602,6 +612,7 @@ export default function App() {
                             updateLockDelayReal={updateLockDelayReal}
                             isKeySharingEnabled={isKeySharingEnabled}
                             setRealUser={setRealUser}
+                            setUsersList={setUsersList}
                             addLog={addLog}
                           />
                         </div>

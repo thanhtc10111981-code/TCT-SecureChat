@@ -6,7 +6,6 @@ import {
   extractPublicKey
 } from '../utils/crypto';
 import { getCameraPermissionSync } from '../utils/cameraPermission';
-import { autoCorrectText } from '../utils/localNlpPredictor';
 
 interface UseMessageLogicProps {
   realUser: UserSession | null;
@@ -939,10 +938,6 @@ export default function useMessageLogic({
     if (!realUser || !activeRecipient) return;
 
     let textToSend = realInput.trim();
-    const isShorthandEnabled = localStorage.getItem('securecrypt_enable_shorthand') === 'true';
-    if (isShorthandEnabled && textToSend) {
-      textToSend = autoCorrectText(textToSend);
-    }
     const imgToSend = attachedImageBase64;
     const fileToSend = attachedFile;
 

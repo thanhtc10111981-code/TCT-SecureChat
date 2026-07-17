@@ -31,6 +31,7 @@ interface MessageItemProps {
   activeEmojiPickerMsgId: string | null;
   setActiveEmojiPickerMsgId: (val: string | null) => void;
   onSelfDestruct?: (messageId: string) => void;
+  partnerUsername?: string;
 }
 
 export default function MessageItem({
@@ -54,6 +55,7 @@ export default function MessageItem({
   activeEmojiPickerMsgId,
   setActiveEmojiPickerMsgId,
   onSelfDestruct,
+  partnerUsername,
 }: MessageItemProps) {
   const isMe = msg.senderId === realUser.id;
   const isSelected = selectedMessageIds.includes(msg.id);
@@ -175,6 +177,13 @@ export default function MessageItem({
                 : 'bg-dantri-green-light/80 border border-dantri-green/15 text-slate-850 rounded-tr-none animate-fade-in'
               : 'bg-slate-100 border border-slate-200 text-slate-850 rounded-tl-none animate-fade-in'
         } ${msg.isDestroyed ? 'border-red-200 bg-red-50 text-red-600' : ''}`}>
+          {!isMe && partnerUsername && !msg.isDestroyed && (
+            <div className={`text-[10px] font-extrabold font-mono mb-1 select-none block ${
+              isJiraTheme ? 'text-[#0052cc]' : 'text-dantri-green'
+            }`}>
+              @{partnerUsername}
+            </div>
+          )}
           {msg.isDestroyed ? (
             <span className="font-mono text-[9px] italic flex items-center space-x-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse mr-1" />

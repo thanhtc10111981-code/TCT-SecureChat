@@ -77,50 +77,6 @@ export default function ChatHeader({
 
       {/* Right Controls */}
       <div className="flex items-center space-x-1">
-        {isUserAdmin && (
-          <div className="relative flex items-center">
-            {!isConfirmingUnlink ? (
-              <button
-                onClick={() => setIsConfirmingUnlink(true)}
-                className="p-1.5 h-[30px] w-[30px] flex items-center justify-center rounded-lg bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 border border-red-200 transition-all shadow-sm cursor-pointer"
-                title="Hủy liên kết (Hủy kết bạn) với đối tác này"
-              >
-                <UserMinus className="w-3.5 h-3.5" />
-              </button>
-            ) : (
-              <div className="flex items-center space-x-1 bg-red-50 border border-red-200 rounded-lg p-1 animate-fade-in text-[8px]">
-                <span className="text-[8px] text-red-700 font-bold px-1 select-none">Hủy?</span>
-                <button
-                  onClick={handleUnlinkPartner}
-                  className="px-1.5 py-0.5 rounded text-[8px] bg-red-600 text-white font-bold hover:bg-red-700 transition-all cursor-pointer"
-                >
-                  Có
-                </button>
-                <button
-                  onClick={() => setIsConfirmingUnlink(false)}
-                  className="px-1.5 py-0.5 rounded text-[8px] bg-white border border-slate-200 text-slate-500 font-bold hover:bg-slate-50 transition-all cursor-pointer"
-                >
-                  Hủy
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <button
-          onClick={() => setShowSecurityHub(!showSecurityHub)}
-          className={`p-1.5 h-[30px] w-[30px] flex items-center justify-center rounded-lg border transition-all ${
-            showSecurityHub
-              ? isJiraTheme 
-                ? 'bg-[#deebff] border-[#b3d4ff] text-[#0747a6] shadow-xs font-bold'
-                : 'bg-dantri-green-light border-dantri-green/20 text-dantri-green shadow-xs font-bold'
-              : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-          }`}
-          title="Giám sát bảo mật & khóa E2EE"
-        >
-          <Shield className="w-3.5 h-3.5" />
-        </button>
-
         {/* Font Size Adjuster dropdown */}
         <div className="relative flex items-center">
           <button
@@ -229,14 +185,6 @@ export default function ChatHeader({
             )}
           </div>
         )}
-
-        <button
-          onClick={handleLockReal}
-          className={`p-1.5 h-[30px] w-[30px] flex items-center justify-center rounded-lg bg-white border border-slate-200 hover:text-amber-600 hover:bg-slate-50 transition-colors shadow-sm ${isJiraTheme ? 'text-jira-blue' : 'text-dantri-green'}`}
-          title="Khóa máy bằng mã PIN"
-        >
-          <Unlock className="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
   );

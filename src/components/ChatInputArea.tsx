@@ -1,8 +1,7 @@
 import React from 'react';
-import { Clock, Send, Paperclip, Image as ImageIcon, FileText, Camera, Settings } from 'lucide-react';
+import { Clock, Send, Paperclip, Image as ImageIcon, FileText, Camera } from 'lucide-react';
 import { UserSession } from '../types';
 import { LastSeenStatus } from './LastSeenStatus';
-import { ShorthandConfigModal } from './ShorthandConfigModal';
 
 interface ChatInputAreaProps {
   liveRecipient: UserSession;
@@ -83,36 +82,35 @@ export default function ChatInputArea({
   handlePaste,
   chatFontSize,
 }: ChatInputAreaProps) {
-  const [enableShorthand, setEnableShorthand] = React.useState(() => {
-    return localStorage.getItem('securecrypt_enable_shorthand') === 'true';
-  });
-  const [isShorthandModalOpen, setIsShorthandModalOpen] = React.useState(false);
-
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = e.target.checked;
-    setEnableShorthand(checked);
-    localStorage.setItem('securecrypt_enable_shorthand', checked ? 'true' : 'false');
+  const formatDestructLabelShort = (sec: number | null): string => {
+    if (sec === null) return '';
+    if (sec === 1) return '1s';
+    if (sec === 2) return '2s';
+    if (sec === 3) return '3s';
+    if (sec === 4) return '4s';
+    if (sec === 5) return '5s';
+    if (sec === 10) return '10s';
+    if (sec === 15) return '15s';
+    if (sec === 30) return '30s';
+    if (sec === 60) return '1m';
+    if (sec === 3600) return '1h';
+    if (sec === 86400) return '1d';
+    if (sec === 604800) return '1w';
+    if (sec >= 604800) return `${Math.floor(sec / 604800)}w`;
+    if (sec >= 86400) return `${Math.floor(sec / 86400)}d`;
+    if (sec >= 3600) return `${Math.floor(sec / 3600)}h`;
+    if (sec >= 60) return `${Math.floor(sec / 60)}m`;
+    return `${sec}s`;
   };
 
   return (
     <div className="p-3 border-t border-slate-200 bg-transparent relative z-10">
-      {/* Combined Info & Self-Destruct Row */}
-      <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100 text-[10px] text-slate-500 font-sans relative">
-        {/* Left side: Partner Info */}
-        <div className="flex items-center gap-1.5 min-w-0 mr-2 text-left">
-          <LastSeenStatus user={liveRecipient} isAdmin={isUserAdmin} variant="tiny" />
-          <span className="font-extrabold text-slate-800 text-[10px] truncate">
-            {liveRecipient.name}
-          </span>
-          {liveRecipient.username && (
-            <span className="font-mono text-[9px] font-bold text-dantri-green bg-dantri-green-light px-1 py-0.2 rounded border border-dantri-green/10 truncate shrink-0">
-              @{liveRecipient.username}
-            </span>
-          )}
-        </div>
-
-        {selectedMessageIds.length > 0 && (
-          <div className="flex items-center space-x-1 shrink-0 mr-auto">
+      {selectedMessageIds.length > 0 && (
+        <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-slate-100 text-[10px] text-slate-500 font-sans relative">
+          <div className="flex items-center space-x-1 shrink-0">
+            <span className="font-bold text-slate-700">Đã chọn {selectedMessageIds.length} tin nhắn:</span>
+          </div>
+          <div className="flex items-center space-x-1 shrink-0 ml-auto">
             <button
               type="button"
               onMouseDown={(e) => e.stopPropagation()}
@@ -122,7 +120,7 @@ export default function ChatInputArea({
                 setSelectedMessageIds([]);
                 setQuotedMessage(null);
               }}
-              className="px-2 py-0.5 rounded text-[9px] bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold transition-all cursor-pointer font-sans animate-fade-in"
+              className="px-2 py-0.5 rounded text-[9px] bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 font-bold transition-all cursor-pointer font-sans"
               title="Bỏ chọn các tin nhắn"
             >
               Hủy chọn
@@ -135,69 +133,14 @@ export default function ChatInputArea({
                 e.stopPropagation();
                 handleDeleteSelectedMessages();
               }}
-              className="px-2 py-0.5 rounded text-[9px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold transition-all cursor-pointer font-sans animate-fade-in"
+              className="px-2 py-0.5 rounded text-[9px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold transition-all cursor-pointer font-sans"
               title="Xóa các tin nhắn đã chọn"
             >
               Xóa ({selectedMessageIds.length})
             </button>
           </div>
-        )}
-
-        <div className="flex items-center space-x-1.5 shrink-0 font-sans ml-auto mr-2">
-          <label className="flex items-center space-x-1 cursor-pointer select-none text-[9px] font-bold text-slate-500 hover:text-slate-700 bg-slate-50 hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition-colors" title="Tự động sửa lỗi chính tả và các từ viết tắt khi gửi tin nhắn">
-            <input
-              type="checkbox"
-              checked={enableShorthand}
-              onChange={handleCheckboxChange}
-              className="rounded text-dantri-green focus:ring-dantri-green w-2.5 h-2.5 cursor-pointer"
-            />
-            <span>Sửa viết tắt & lỗi gõ</span>
-          </label>
-          <button
-            type="button"
-            onClick={() => setIsShorthandModalOpen(true)}
-            className="p-0.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-50 border border-slate-200 bg-white transition-all cursor-pointer flex items-center justify-center"
-            title="Cấu hình từ viết tắt cá nhân"
-          >
-            <Settings className="w-2.5 h-2.5" />
-          </button>
         </div>
-
-        <div className="relative shrink-0 flex items-center space-x-1 font-mono">
-          <Clock className="w-3 h-3 text-amber-500 shrink-0" />
-          <button
-            type="button"
-            onClick={() => setIsRealDestructOpen(!isRealDestructOpen)}
-            className="px-2 py-0.5 rounded text-[9px] bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold transition-all flex items-center space-x-1 cursor-pointer"
-            title="Bấm để chọn thời gian tự hủy"
-          >
-            <span>{formatDestructLabel(realSelfDestruct)}</span>
-            <span className="text-[7px] opacity-70">▼</span>
-          </button>
-
-          {isRealDestructOpen && (
-            <>
-              {/* Invisible click-away backdrop */}
-              <div className="fixed inset-0 z-10" onClick={() => setIsRealDestructOpen(false)} />
-              <div className="absolute right-0 bottom-full mb-1 bg-white border border-slate-200 rounded-xl shadow-xl p-1.5 z-20 flex flex-col space-y-0.5 min-w-[100px] animate-fade-in text-left font-sans">
-                {[null, 10, 300, 86400, 604800].map((val) => (
-                  <button
-                    key={val ?? 'off'}
-                    type="button"
-                    onClick={() => {
-                      setRealSelfDestruct(val);
-                      setIsRealDestructOpen(false);
-                    }}
-                    className={`px-2.5 py-1.5 rounded-lg text-[9px] text-left transition-colors w-full cursor-pointer ${realSelfDestruct === val ? 'bg-amber-50 text-amber-850 font-bold border border-amber-200/50' : 'text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    {formatDestructLabel(val)}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Message/Image sender form */}
       <form onSubmit={handleSubmitWithQuote} className="flex items-end space-x-1.5 pb-0.5">
@@ -313,46 +256,99 @@ export default function ChatInputArea({
           </div>
         </div>
 
-        <textarea
-          ref={realInputRef}
-          rows={1}
-          value={realInput}
-          onChange={(e) => setRealInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onBlur={() => {
-            setTimeout(() => {
-              const el = realInputRef.current;
-              if (el) {
-                try {
-                  el.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'end'
-                  });
-                } catch (e) {
-                  el.scrollIntoView(false);
+
+        <div className="flex-1 relative flex items-end">
+          <textarea
+            ref={realInputRef}
+            rows={1}
+            value={realInput}
+            onChange={(e) => setRealInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onBlur={() => {
+              setTimeout(() => {
+                const el = realInputRef.current;
+                if (el) {
+                  try {
+                    el.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'end'
+                    });
+                  } catch (e) {
+                    el.scrollIntoView(false);
+                  }
                 }
-              }
-            }, 120);
-          }}
-          disabled={!realUser.isAppUnlocked}
-          placeholder={
-            attachedFile
-              ? "Thêm chú thích tệp tin (tùy chọn)..."
-              : attachedImageBase64
-                ? "Thêm chú thích ảnh (tùy chọn)..."
-                : isMobileDevice
-                  ? "Nhắn tin..."
-                  : "Nhắn tin... (Shift+Enter để xuống dòng)"
-          }
-          className={`flex-1 border rounded-xl px-3 py-1.5 h-[36px] ${
-            chatFontSize === 'xs' ? 'text-xs' : chatFontSize === 'sm' ? 'text-sm' : chatFontSize === 'base' ? 'text-base' : 'text-lg'
-          } focus:outline-none focus:ring-2 placeholder:text-slate-400 disabled:opacity-60 resize-none min-h-[36px] max-h-[120px] leading-relaxed scrollbar-none ${
-            isJiraTheme 
-              ? 'bg-[#deebff]/75 border-[#b3d4ff]/60 text-slate-900 focus:border-jira-blue/40 focus:ring-jira-blue/5' 
-              : 'bg-dantri-green-light/80 border-dantri-green/15 text-slate-850 focus:border-dantri-green/40 focus:ring-dantri-green/5'
-          }`}
-        />
+              }, 120);
+            }}
+            disabled={!realUser.isAppUnlocked}
+            placeholder={
+              attachedFile
+                ? "Thêm chú thích tệp tin (tùy chọn)..."
+                : attachedImageBase64
+                  ? "Thêm chú thích ảnh (tùy chọn)..."
+                  : isMobileDevice
+                    ? "Nhắn tin..."
+                    : "Nhắn tin... (Shift+Enter để xuống dòng)"
+            }
+            className={`w-full border rounded-xl pl-3 pr-14 py-1.5 h-[36px] ${
+              chatFontSize === 'xs' ? 'text-xs' : chatFontSize === 'sm' ? 'text-sm' : chatFontSize === 'base' ? 'text-base' : 'text-lg'
+            } focus:outline-none focus:ring-2 placeholder:text-slate-400 disabled:opacity-60 resize-none min-h-[36px] max-h-[120px] leading-relaxed scrollbar-none ${
+              isJiraTheme 
+                ? 'bg-[#deebff]/75 border-[#b3d4ff]/60 text-slate-900 focus:border-jira-blue/40 focus:ring-jira-blue/5' 
+                : 'bg-dantri-green-light/80 border-dantri-green/15 text-slate-850 focus:border-dantri-green/40 focus:ring-dantri-green/5'
+            }`}
+          />
+
+          {/* Self-destruct button inside the textarea box */}
+          <div className="absolute right-2 bottom-1 shrink-0 flex items-center z-20">
+            <div className="relative flex items-center">
+              <button
+                type="button"
+                onClick={() => setIsRealDestructOpen(!isRealDestructOpen)}
+                className={`p-1 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                  realSelfDestruct !== null 
+                    ? 'text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200/50 px-1.5 py-0.5' 
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+                title="Thời gian tự hủy"
+              >
+                {realSelfDestruct === null ? (
+                  <Clock className="w-4 h-4" />
+                ) : (
+                  <span className="text-[10px] font-bold text-amber-700 font-sans">
+                    {formatDestructLabelShort(realSelfDestruct)}
+                  </span>
+                )}
+              </button>
+
+              {isRealDestructOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setIsRealDestructOpen(false)} />
+                  <div className="absolute right-0 bottom-full mb-1.5 bg-white border border-slate-200 rounded-xl shadow-xl p-1 z-40 flex flex-col space-y-0.5 min-w-[130px] max-h-[220px] overflow-y-auto animate-scale-in text-left font-sans scrollbar-none">
+                    {[null, 1, 2, 3, 4, 5, 10, 15, 30, 60, 3600, 86400, 604800].map((val) => (
+                      <button
+                        key={val ?? 'off'}
+                        type="button"
+                        onClick={() => {
+                          setRealSelfDestruct(val);
+                          setIsRealDestructOpen(false);
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-[9px] text-left transition-colors w-full cursor-pointer flex items-center justify-between ${
+                          realSelfDestruct === val 
+                            ? 'bg-amber-50 text-amber-850 font-bold border border-amber-200/50' 
+                            : 'text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{val === null ? 'Tắt tự hủy' : formatDestructLabel(val)}</span>
+                        {realSelfDestruct === val && <span className="text-[7px] text-amber-600">●</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
 
         <button
           type="submit"
@@ -366,7 +362,6 @@ export default function ChatInputArea({
           <Send className="w-3.5 h-3.5" />
         </button>
       </form>
-      <ShorthandConfigModal isOpen={isShorthandModalOpen} onClose={() => setIsShorthandModalOpen(false)} isAdmin={isUserAdmin} />
     </div>
   );
 }

@@ -310,9 +310,6 @@ export default function useAppLogic() {
           if (typeof data.disguiseArticleContent === 'string') {
             setDisguiseArticleContent(data.disguiseArticleContent);
           }
-          if (typeof data.systemShorthands === 'string' && data.systemShorthands) {
-            localStorage.setItem('securecrypt_system_shorthands', data.systemShorthands);
-          }
         }
       } catch (e) {
         console.error('Error fetching settings:', e);

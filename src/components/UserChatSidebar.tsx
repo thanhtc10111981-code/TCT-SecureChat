@@ -19,7 +19,8 @@ import {
   TrendingUp,
   Activity,
   Layers,
-  X
+  X,
+  UserMinus
 } from 'lucide-react';
 import { UserSession, Message } from '../types';
 import { LastSeenStatus } from './LastSeenStatus';
@@ -45,6 +46,7 @@ interface UserChatSidebarProps {
   updateLockDelayReal?: (delaySecs: number) => void;
   isKeySharingEnabled?: boolean;
   setRealUser?: React.Dispatch<React.SetStateAction<UserSession | null>>;
+  setUsersList?: React.Dispatch<React.SetStateAction<UserSession[]>>;
   addLog?: (text: string, type?: 'info' | 'success' | 'warn' | 'crypto') => void;
 }
 
@@ -67,6 +69,7 @@ export default function UserChatSidebar({
   updateLockDelayReal = () => {},
   isKeySharingEnabled = false,
   setRealUser,
+  setUsersList,
   addLog,
 }: UserChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,6 +86,42 @@ export default function UserChatSidebar({
   const [syncPassword, setSyncPassword] = useState('');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  const [confirmingUnlinkUserId, setConfirmingUnlinkUserId] = useState<string | null>(null);
+
+  const handleUnlinkPartnerSidebar = async (e: React.MouseEvent, targetUserId: string, targetName: string) => {
+    e.stopPropagation();
+    addLog?.(`Đang gửi yêu cầu hủy liên kết với ${targetName}...`, 'info');
+    try {
+      const res = await fetch('/api/users/unlink-friend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: realUser.id,
+          userAId: realUser.id,
+          userBId: targetUserId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Lỗi từ máy chủ khi hủy liên kết.');
+      }
+
+      addLog?.(data.message || `Đã hủy liên kết thành công với ${targetName}!`, 'success');
+      
+      if (setUsersList) {
+        setUsersList((prev) => prev.filter((u) => u.id !== targetUserId));
+      }
+      if (activeRecipient?.id === targetUserId) {
+        setActiveRecipient(null);
+      }
+      setConfirmingUnlinkUserId(null);
+    } catch (err: any) {
+      console.error('Error unlinking friend:', err);
+      addLog?.(err.message || 'Có lỗi xảy ra khi hủy liên kết.', 'warn');
+    }
+  };
 
   const needsSync = isKeySharingEnabled && 
                     realUser && 
@@ -650,6 +689,44 @@ export default function UserChatSidebar({
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {isUserAdmin && (
+                      <div className="flex items-center mr-1" onClick={(e) => e.stopPropagation()}>
+                        {confirmingUnlinkUserId !== u.id ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingUnlinkUserId(u.id);
+                            }}
+                            className="p-1 rounded hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                            title="Hủy kết bạn (Hủy liên kết)"
+                          >
+                            <UserMinus className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <div className="flex items-center space-x-1 bg-red-50 border border-red-200 rounded px-1 py-0.5 text-[7.5px] font-bold text-red-700 animate-fade-in">
+                            <span>Hủy?</span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleUnlinkPartnerSidebar(e, u.id, u.name)}
+                              className="px-1 bg-red-600 text-white rounded hover:bg-red-700 text-[6.5px] font-extrabold cursor-pointer"
+                            >
+                              Có
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmingUnlinkUserId(null);
+                              }}
+                              className="px-1 bg-white border border-slate-200 text-slate-500 rounded hover:bg-slate-50 text-[6.5px] font-extrabold cursor-pointer"
+                            >
+                              Không
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <span className="text-[9px] text-[#5e6c84] font-medium font-sans">@{u.username}</span>
                     <div className="relative shrink-0">
                       <img 
@@ -1013,6 +1090,44 @@ export default function UserChatSidebar({
                 <div className="flex items-center justify-between mt-1.5 text-[9px] text-slate-450 font-sans">
                   <span className="font-medium truncate max-w-[100px] text-slate-500">B.tập: {u.name}</span>
                   <div className="flex items-center gap-1.5">
+                    {isUserAdmin && (
+                      <div className="flex items-center mr-1" onClick={(e) => e.stopPropagation()}>
+                        {confirmingUnlinkUserId !== u.id ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingUnlinkUserId(u.id);
+                            }}
+                            className="p-1 rounded hover:bg-red-50 text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                            title="Hủy kết bạn (Hủy liên kết)"
+                          >
+                            <UserMinus className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <div className="flex items-center space-x-1 bg-red-50 border border-red-200 rounded px-1 py-0.5 text-[7.5px] font-bold text-red-700 animate-fade-in">
+                            <span>Hủy?</span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleUnlinkPartnerSidebar(e, u.id, u.name)}
+                              className="px-1 bg-red-600 text-white rounded hover:bg-red-700 text-[6.5px] font-extrabold cursor-pointer"
+                            >
+                              Có
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmingUnlinkUserId(null);
+                              }}
+                              className="px-1 bg-white border border-slate-200 text-slate-500 rounded hover:bg-slate-50 text-[6.5px] font-extrabold cursor-pointer"
+                            >
+                              Không
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <span>
                       {lastMsg 
                         ? (lastMsg.isDestroyed ? '⚠️ Đã hủy' : (lastMsg.senderId === realUser.id ? 'Đã gửi' : 'Bài mới'))

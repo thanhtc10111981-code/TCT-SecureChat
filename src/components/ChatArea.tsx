@@ -996,6 +996,7 @@ Với E2EE, máy chủ chỉ đóng vai trò là một bưu tá trung chuyển c
                   activeEmojiPickerMsgId={activeEmojiPickerMsgId}
                   setActiveEmojiPickerMsgId={setActiveEmojiPickerMsgId}
                   onSelfDestruct={handleSelfDestruct}
+                  partnerUsername={activeRecipient.username}
                 />
               ))}
 

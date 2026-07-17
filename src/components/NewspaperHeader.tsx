@@ -8,7 +8,8 @@ import {
   Search, 
   Bell, 
   HelpCircle, 
-  LogOut 
+  LogOut,
+  Shield
 } from 'lucide-react';
 import { UserSession } from '../types';
 
@@ -17,13 +18,17 @@ interface NewspaperHeaderProps {
   onOpenDeletePostings: () => void;
   onOpenSqlQuery: () => void;
   onLogout?: () => void;
+  showSecurityHub?: boolean;
+  setShowSecurityHub?: (val: boolean) => void;
 }
 
 export default function NewspaperHeader({ 
   realUser, 
   onOpenDeletePostings, 
   onOpenSqlQuery,
-  onLogout
+  onLogout,
+  showSecurityHub,
+  setShowSecurityHub
 }: NewspaperHeaderProps) {
   // Format the current local date in Vietnamese format
   const formattedDate = useMemo(() => {
@@ -122,6 +127,18 @@ export default function NewspaperHeader({
             <Bell className="w-4 h-4" />
           </button>
           
+          <button 
+            onClick={() => setShowSecurityHub?.(!showSecurityHub)}
+            className={`p-1.5 rounded-full transition-all focus:outline-none cursor-pointer ${
+              showSecurityHub
+                ? 'bg-[#deebff] text-[#0747a6]'
+                : 'text-[#5e6c84] hover:bg-slate-100'
+            }`}
+            title="Giám sát bảo mật & khóa E2EE"
+          >
+            <Shield className="w-4 h-4" />
+          </button>
+          
           <button className="p-1.5 rounded-full hover:bg-slate-100 text-[#5e6c84] focus:outline-none">
             <HelpCircle className="w-4 h-4" />
           </button>
@@ -210,6 +227,21 @@ export default function NewspaperHeader({
             </a>
             
             <a href="#contributor" className="text-slate-600 hover:text-dantri-green transition-colors mr-2">Bạn đọc góp ý</a>
+            
+            <span className="text-slate-300">|</span>
+
+            <button
+              onClick={() => setShowSecurityHub?.(!showSecurityHub)}
+              className={`text-xs uppercase font-bold tracking-wider whitespace-nowrap px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors focus:outline-none cursor-pointer ${
+                showSecurityHub
+                  ? 'bg-dantri-green-light text-dantri-green'
+                  : 'text-slate-600 hover:text-dantri-green'
+              }`}
+              title="Giám sát bảo mật & khóa E2EE"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>GIÁM SÁT BẢO MẬT & KHÓA E2EE</span>
+            </button>
 
             {/* Admin-only functional options inside the main menu */}
             {realUser?.role === 'admin' && (
